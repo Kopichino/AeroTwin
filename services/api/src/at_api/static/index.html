@@ -63,6 +63,8 @@
   .tail{font:12px var(--mono);color:var(--tx)}
   .pill{display:inline-block;font:10px/1 var(--mono);padding:4px 7px;border-radius:5px;letter-spacing:.03em}
   .mod{font:11px var(--mono);color:var(--tx2)}
+  .mono-sm{font:11px var(--mono);color:var(--tx3);text-align:right}
+  .anom{font:11px var(--mono);padding:3px 6px;border-radius:4px}
 
   .hbar{position:relative;height:6px;border-radius:3px;background:rgba(255,255,255,.07);
     overflow:hidden;min-width:80px}
@@ -91,8 +93,10 @@
       <div class="sub">warning + critical</div></div>
     <div class="kpi"><div class="label">Replay speed</div><div class="value" id="k-speed">—</div>
       <div class="sub">virtual cycles / sec</div></div>
-    <div class="kpi"><div class="label">Frames</div><div class="value" id="k-frames">—</div>
-      <div class="sub">pushed over websocket</div></div>
+    <div class="kpi"><div class="label">Anomalies</div><div class="value" id="k-anom">—</div>
+      <div class="sub">engines alerting</div></div>
+    <div class="kpi"><div class="label">Model</div><div class="value" id="k-model">—</div>
+      <div class="sub" id="k-inf">—</div></div>
   </div>
 
   <div class="bands" id="bands"></div>
@@ -105,7 +109,8 @@
     <table>
       <thead><tr>
         <th>Tail</th><th>Unit</th><th class="num">Cycle</th><th class="num">Health</th>
-        <th style="width:130px">Condition</th><th>Band</th><th>Worst module</th><th class="num">RUL</th>
+        <th style="width:120px">Condition</th><th>Band</th><th>Worst module</th>
+        <th class="num">RUL</th><th style="width:110px">80% interval</th><th class="num">Anomaly</th>
       </tr></thead>
       <tbody id="rows"></tbody>
     </table>
@@ -113,6 +118,7 @@
 
   <footer>
     Live digital twins replaying NASA C-MAPSS · physics-informed component health ·
+    deep RUL with conformal 80% intervals · <code>*</code> = trend estimate, no model ·
     <code>/docs</code> for the API
   </footer>
 </div>
@@ -128,6 +134,13 @@ const $ = id => document.getElementById(id);
 let filter = null, lastHealth = new Map(), frames = 0;
 
 function bandColour(b){ return (BANDS[b]||{}).c || '#9BA3B4'; }
+
+function anomalyCell(r){
+  const v = r.anomaly_score ?? 0;
+  if (!r.anomaly_alerting) return `<span style="color:var(--tx3)">${v.toFixed(1)}</span>`;
+  const c = v >= 11 ? '#FF4D4D' : v >= 9 ? '#F5B942' : '#A855F7';
+  return `<span class="anom" style="color:${c};background:${c}1f">${v.toFixed(1)}</span>`;
+}
 
 function renderBands(counts){
   $('bands').innerHTML = Object.entries(BANDS).map(([key,meta]) => `
@@ -160,7 +173,11 @@ function renderRows(list){
       <td><div class="hbar"><i style="width:${Math.max(2,hi)}%;background:${c}"></i></div></td>
       <td><span class="pill" style="color:${c};background:${c}1f">${r.health_band}</span></td>
       <td class="mod">${r.worst_module ?? '—'}</td>
-      <td class="num" style="color:var(--tx2)">${r.rul_p50 != null ? Math.round(r.rul_p50) : '—'}</td>
+      <td class="num" style="color:var(--tx2)">
+        ${r.rul_p50 != null ? Math.round(r.rul_p50) : '—'}${r.model_backed ? '' : '<span title="trend estimate, no model" style="color:var(--tx3)">*</span>'}
+      </td>
+      <td class="mono-sm">${r.rul_p10 != null && r.rul_p90 ? `${Math.round(r.rul_p10)}–${Math.round(r.rul_p90)}` : '—'}</td>
+      <td class="num">${anomalyCell(r)}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="8" style="padding:26px;text-align:center;color:var(--tx3)">
       No engines match this filter.</td></tr>`;
@@ -174,7 +191,13 @@ function applyFleet(p){
   $('k-risk').textContent    = p.at_risk ?? 0;
   $('k-speed').textContent   = `${p.speed ?? 1}×`;
   renderBands(p.by_band);
-  if (p.engines_list) renderRows(p.engines_list);
+  if (p.engines_list) {
+    const list = p.engines_list;
+    $('k-anom').textContent = list.filter(r => r.anomaly_alerting).length;
+    const backed = list.filter(r => r.model_backed).length;
+    $('k-model').textContent = `${backed}/${list.length}`;
+    renderRows(list);
+  }
 }
 
 function connect(){
@@ -196,7 +219,11 @@ function connect(){
       const s = m.payload;
       $('perf').textContent = `tick p50 ${s.tick_p50_ms}ms · p99 ${s.tick_p99_ms}ms`;
       $('meta').textContent = `${s.ticks} ticks · up ${s.uptime_s}s`;
-      $('k-frames').textContent = s.frames_published?.toLocaleString() ?? frames;
+      const inf = s.inference;
+      if (inf) {
+        $('k-inf').textContent = inf.models_loaded
+          ? `${inf.calls} calls · ${inf.latency_p50_ms}ms` : 'no model loaded';
+      }
     }
   };
 

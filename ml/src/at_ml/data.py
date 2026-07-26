@@ -23,16 +23,15 @@ from at_data.parse import load_parquet
 from at_data.regimes import RegimeModel, assign_regimes, fit_regimes
 
 from at_core.domain.enums import Subset
+from at_core.domain.sensors import CYCLE_NORM_REFERENCE as _CYCLE_NORM_REFERENCE
 from at_core.domain.sensors import informative_sensors
 
 #: Piecewise RUL cap (ADR-012). Degradation is negligible early in life, so an
 #: uncapped label asks the model to distinguish states it cannot observe.
 R_EARLY = 125.0
 
-#: Fixed divisor for the age feature. Chosen near the longest observed
-#: trajectory (543 cycles in FD004) so the feature lands in roughly [0, 1]
-#: without ever referencing a unit's own final cycle.
-CYCLE_NORM_REFERENCE = 400.0
+#: Re-exported from the domain kernel so training and serving cannot diverge.
+CYCLE_NORM_REFERENCE = _CYCLE_NORM_REFERENCE
 
 
 @dataclass(frozen=True, slots=True)

@@ -341,7 +341,8 @@
       "parameters": 185089,
       "train_seed": 42,
       "trained_at": "2026-07-26T16:31:09.701194+00:00",
-      "notes": "Selected on validation NASA score from 6 architectures."
+      "notes": "Selected on validation NASA score from 6 architectures.",
+      "conformal_offset": 5.900317327192286
     },
     {
       "model_id": "93a0bb7c-ab5a-58aa-b221-5a0703584cec",
@@ -665,7 +666,8 @@
       "parameters": 344002,
       "train_seed": 42,
       "trained_at": "2026-07-26T16:33:30.378363+00:00",
-      "notes": "Selected on validation NASA score from 6 architectures."
+      "notes": "Selected on validation NASA score from 6 architectures.",
+      "conformal_offset": 5.39398330119995
     }
   ]
 }

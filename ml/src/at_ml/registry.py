@@ -47,6 +47,14 @@ class ModelEntry:
     train_seed: int
     trained_at: str
     notes: str = ""
+    conformal_offset: float = 0.0
+    """Additive half-width correction fitted after training (Doc 07 section 7.5).
+
+    MC-dropout systematically understates uncertainty, and TorchScript tracing
+    removes dropout entirely, so the raw model spread covered only 47 % of the
+    time against a nominal 80 %. This offset is fitted by split-conformal
+    calibration on held-out data and brings coverage to nominal.
+    """
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

@@ -157,6 +157,16 @@ MODULE_CRITICALITY: Final[MappingProxyType[EngineModule, float]] = MappingProxyT
     }
 )
 
+#: Fixed divisor for the normalised-age feature.
+#:
+#: Lives here, in the domain kernel, because both the training pipeline and the
+#: serving path must use the identical value: a mismatch would silently shift the
+#: feature between train and inference. Chosen near the longest observed
+#: trajectory (543 cycles in FD004) so the feature lands in roughly [0, 1]
+#: without ever referencing a unit's own final cycle -- see the target leak
+#: recorded in docs/reports/model-comparison.md.
+CYCLE_NORM_REFERENCE: Final[float] = 400.0
+
 #: Modules that receive a health score in the twin. Order is display order.
 TRACKED_MODULES: Final[tuple[EngineModule, ...]] = (
     EngineModule.FAN,

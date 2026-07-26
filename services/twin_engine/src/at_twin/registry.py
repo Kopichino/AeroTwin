@@ -10,14 +10,24 @@ which keeps the whole engine testable in-process.
 from __future__ import annotations
 
 import uuid
+from collections import deque
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from types import MappingProxyType
 
 import numpy as np
 from at_data.regimes import RegimeModel
 
-from at_core.domain.enums import CommandType, EngineModule, HealthBand, Subset, TwinStatus
+from at_core.domain.enums import (
+    CommandType,
+    EngineModule,
+    HealthBand,
+    Severity,
+    Subset,
+    TwinStatus,
+)
 from at_core.domain.health import ComponentState
+from at_core.domain.sensors import CYCLE_NORM_REFERENCE
 from at_core.domain.twin import (
     EngineSpec,
     Prediction,
@@ -28,6 +38,8 @@ from at_core.domain.twin import (
     apply_telemetry,
 )
 from at_core.events import DomainEvent
+from at_twin.anomaly import MIN_OBSERVATIONS, AnomalyReading, DetectorState, detect
+from at_twin.inference import InferenceClient, LoadedModel
 from at_twin.physics import (
     BaselineAccumulator,
     apply_maintenance,
@@ -59,6 +71,11 @@ class TwinRuntime:
     clock time. Without this a recycled engine is permanently behind the global
     counter and never ages again.
     """
+    history: deque[dict[str, float]] = field(default_factory=lambda: deque(maxlen=64))
+    """Recent raw sensor rows, used to assemble the model input window."""
+    detector: DetectorState = field(default_factory=DetectorState)
+    anomaly: AnomalyReading | None = None
+    last_inference_cycle: int = -999
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +107,9 @@ class TwinRegistry:
         snapshot_every: int = 50,
         recycle_on_failure: bool = True,
         regime_model: RegimeModel | None = None,
+        inference: InferenceClient | None = None,
+        inference_every: int = 5,
+        explain_every: int = 20,
     ) -> None:
         if shard_count < 1 or not 0 <= shard_index < shard_count:
             raise ValueError(f"invalid shard {shard_index}/{shard_count}")
@@ -102,6 +122,9 @@ class TwinRegistry:
         self.clock = clock or ReplayClock()
         self.snapshot_every = snapshot_every
         self.recycle_on_failure = recycle_on_failure
+        self.inference = inference or InferenceClient()
+        self.inference_every = inference_every
+        self.explain_every = explain_every
         self.regime_model = regime_model
         """Fitted k-means centroids from M2, used to classify live telemetry.
 
@@ -120,6 +143,7 @@ class TwinRegistry:
         self._recycle_count: dict[uuid.UUID, int] = {}
 
         self._twins: dict[uuid.UUID, TwinRuntime] = {}
+        self._pending: list[tuple[uuid.UUID, np.ndarray, int]] = []
         self._by_unit: dict[int, uuid.UUID] = {}
 
         self._provision(phase_seed)
@@ -278,6 +302,7 @@ class TwinRegistry:
         from at_twin.physics import BASELINE_CYCLES
 
         baseline = BaselineAccumulator()
+        detector = DetectorState()
         # Multi-regime subsets need enough opening cycles to fill a baseline for
         # each of the six flight conditions, not just the first twenty rows.
         span = BASELINE_CYCLES * max(1, self.subset.n_conditions)
@@ -285,10 +310,15 @@ class TwinRegistry:
             row = self.source.read(runtime.cursor.unit, cycle)
             if row is None:
                 break
-            baseline = baseline.observe(
-                compute_proxies(row.sensors), self._classify_regime(row.op_settings)
-            )
+            regime = self._classify_regime(row.op_settings)
+            baseline = baseline.observe(compute_proxies(row.sensors), regime)
+            # The anomaly detector needs its own healthy reference. Deriving it
+            # here, from the same opening cycles, is what lets a twin starting at
+            # a phase offset still judge deviation against its own healthy state
+            # rather than against mid-life values it mistakes for normal.
+            detector, _ = detect(detector, row.sensors, regime, learning=True)
         runtime.baseline = baseline
+        runtime.detector = detector
         return ()
 
     # ── tick ─────────────────────────────────────────────────────────────────
@@ -324,6 +354,8 @@ class TwinRegistry:
 
             if self.recycle_on_failure and runtime.state.status is TwinStatus.FAILED:
                 events.extend(self._recycle(engine_id, runtime, stamp, now_cycle=target))
+
+        self._run_batched_inference()
 
         return TickResult(
             events=tuple(events),
@@ -373,7 +405,8 @@ class TwinRegistry:
         runtime.state = telemetry.state
         events.extend(telemetry.events)
 
-        regime = runtime.state.regime
+        regime = self._classify_regime(row.op_settings)
+        runtime.history.append(dict(row.sensors))
         if not runtime.baseline.is_complete:
             runtime.baseline = runtime.baseline.observe(compute_proxies(row.sensors), regime)
 
@@ -394,19 +427,39 @@ class TwinRegistry:
 
         runtime.components = components
 
-        prediction = self._estimate_prediction(runtime, components)
+        # Anomaly detection runs on every cycle: it is cheap and its output
+        # feeds the health index.
+        runtime.detector, reading = detect(
+            runtime.detector,
+            row.sensors,
+            regime,
+            # Learning stops once the healthy reference is established.
+            # Continuing to adapt during a developing fault would drag the
+            # baseline toward it and silently mask the anomaly.
+            learning=runtime.detector.observations < MIN_OBSERVATIONS * 4,
+        )
+        runtime.anomaly = reading
+
+        prediction = self._infer(runtime, components)
         health = apply_health_update(
             runtime.state,
             components=components,
-            anomaly_score=runtime.state.anomaly_score,
+            anomaly_score=reading.score,
             prediction=prediction,
-            # Until M5 the RUL figure is a trend extrapolation, not a model
-            # output. It is displayed but must not drive the health index.
+            # The model term only counts once a real registered model produced
+            # the number; the trend fallback must not drive the health index.
             model_trusted=prediction is not None and prediction.model_id is not None,
             maintenance_applied=maintenance_applied,
         )
         runtime.state = health.state
         events.extend(health.events)
+
+        if reading.is_new:
+            runtime.state, event = _emit_anomaly(runtime.state, reading, opened=True)
+            events.append(event)
+        elif reading.is_resolved:
+            runtime.state, event = _emit_anomaly(runtime.state, reading, opened=False)
+            events.append(event)
 
         return events
 
@@ -436,6 +489,13 @@ class TwinRegistry:
         runtime.last_snapshot_cycle = 0
         runtime.maintenance_pending = None
         runtime.epoch_cycle = now_cycle
+        # A fresh engine must not inherit the previous one's sensor history,
+        # inference cadence or open anomaly. Leaving these behind fed the model a
+        # window spanning two different engines, and left the new twin looking
+        # permanently up to date so it was never scored again.
+        runtime.history.clear()
+        runtime.last_inference_cycle = -999
+        runtime.anomaly = None
         self._catch_up_baseline(runtime)
         return []
 
@@ -445,15 +505,114 @@ class TwinRegistry:
             return 0
         return int(self.regime_model.predict(np.asarray([op_settings]))[0])
 
-    def _estimate_prediction(
+    def _infer(
         self, runtime: TwinRuntime, components: dict[EngineModule, ComponentState]
     ) -> Prediction | None:
-        """Provisional RUL estimate until the trained model lands in M5.
+        """Score this twin with the registered model, or fall back to a trend.
 
-        Extrapolates the worst component's degradation rate to zero. This is a
-        placeholder with an honest name -- it is never presented as a model
-        prediction, and ``model_id`` is explicitly ``None`` so the UI can show
-        that no model is attached yet.
+        Inference runs every ``inference_every`` cycles rather than every cycle:
+        RUL moves slowly compared with the tick rate, and at 260 engines a
+        per-cycle forward pass would dominate the tick budget for no gain.
+        """
+        model = self.inference.model_for(self.subset.value)
+        due = runtime.state.cycle - runtime.last_inference_cycle >= self.inference_every
+
+        if model is not None and due and len(runtime.history) >= model.window:
+            window = self._assemble_window(runtime, model)
+            if window is not None:
+                # Queue for the end-of-tick batch rather than scoring inline.
+                # Scoring engines one at a time serialised 100+ forward passes
+                # per tick and pushed p99 latency to 2.6 s against a 120 ms
+                # budget. Batching is also how the model was trained to run.
+                self._pending.append((runtime.state.engine_id, window, runtime.state.regime))
+
+        # Keep the previous model prediction rather than replacing it with a
+        # weaker estimate; a stale real prediction beats a fresh guess.
+        if runtime.state.prediction is not None and runtime.state.prediction.model_id:
+            return runtime.state.prediction
+
+        return self._trend_estimate(runtime, components)
+
+    def _run_batched_inference(self) -> None:
+        """Score every queued window in a single call and fold results back in."""
+        if not self._pending:
+            return
+
+        engine_ids = [str(engine_id) for engine_id, _, _ in self._pending]
+        windows = np.stack([window for _, window, _ in self._pending])
+        regimes = np.asarray([regime for _, _, regime in self._pending])
+
+        results = self.inference.predict(
+            self.subset.value, engine_ids, windows, regimes, explain=False
+        )
+
+        for engine_id, _, _ in self._pending:
+            result = results.get(str(engine_id))
+            runtime = self._twins.get(engine_id)
+            if result is None or runtime is None:
+                continue
+            runtime.last_inference_cycle = runtime.state.cycle
+            runtime.state = replace(
+                runtime.state,
+                prediction=Prediction(
+                    rul_p50=result.rul_p50,
+                    rul_p10=result.rul_p10,
+                    rul_p90=result.rul_p90,
+                    failure_prob=MappingProxyType(dict(result.failure_prob)),
+                    model_id=result.model_id,
+                    computed_at_cycle=runtime.state.cycle,
+                    stale=result.stale,
+                ),
+            )
+
+        self._pending = []
+
+    def _assemble_window(self, runtime: TwinRuntime, model: LoadedModel) -> np.ndarray | None:
+        """Build the model's feature window from buffered raw sensor rows.
+
+        Engineered features (``s3_d``, ``s3_m5``, ``cycle_norm``) are recomputed
+        here exactly as ``at_ml.data`` computes them at training time. Any
+        divergence between the two would produce confidently wrong predictions
+        with no error raised anywhere, so the definitions are kept adjacent in
+        review and covered by a parity test.
+        """
+        rows = list(runtime.history)[-model.window :]
+        if len(rows) < model.window:
+            return None
+
+        base_cycle = runtime.state.cycle - model.window + 1
+        out = np.zeros((model.window, len(model.features)), dtype=np.float32)
+
+        for column, feature in enumerate(model.features):
+            if feature == "cycle_norm":
+                for step in range(model.window):
+                    out[step, column] = (base_cycle + step) / CYCLE_NORM_REFERENCE
+            elif feature.endswith("_d"):
+                key = feature[:-2]
+                for step in range(model.window):
+                    previous = rows[step - 1].get(key, rows[step].get(key, 0.0))
+                    out[step, column] = rows[step].get(key, 0.0) - (
+                        previous if step > 0 else rows[step].get(key, 0.0)
+                    )
+            elif feature.endswith("_m5"):
+                key = feature[:-3]
+                for step in range(model.window):
+                    window_slice = rows[max(0, step - 4) : step + 1]
+                    values = [r.get(key, 0.0) for r in window_slice]
+                    out[step, column] = sum(values) / len(values)
+            else:
+                for step in range(model.window):
+                    out[step, column] = rows[step].get(feature, 0.0)
+
+        return out
+
+    def _trend_estimate(
+        self, runtime: TwinRuntime, components: dict[EngineModule, ComponentState]
+    ) -> Prediction | None:
+        """Fallback when no model is registered: extrapolate the worst component.
+
+        Deliberately carries ``model_id=None`` so the health index ignores it and
+        the UI can show that no model is attached.
         """
         if not components or not runtime.baseline.is_ready:
             return None
@@ -461,7 +620,6 @@ class TwinRegistry:
         worst = min(components.values(), key=lambda component: component.score)
         rate = worst.degradation_rate
         estimate = 125.0 if rate >= -1e-6 else min(125.0, max(0.0, worst.score / abs(rate)))
-
         return Prediction(
             rul_p50=estimate,
             rul_p10=estimate * 0.6,
@@ -519,6 +677,31 @@ class FleetSummary:
             "at_risk": self.at_risk,
             "speed": self.speed,
         }
+
+
+def _emit_anomaly(
+    state: TwinState, reading: AnomalyReading, *, opened: bool
+) -> tuple[TwinState, DomainEvent]:
+    """Record an anomaly opening or resolving on the twin's event log."""
+    from at_core.events import EventType
+
+    payload = {
+        "detector": reading.detector,
+        "score": round(reading.score, 3),
+        "module": reading.module.value if reading.module else None,
+        "sensors": [{"sensor": key, "z": round(value, 2)} for key, value in reading.sensors[:5]],
+    }
+    new_seq = state.seq + 1
+    event = DomainEvent(
+        engine_id=state.engine_id,
+        seq=new_seq,
+        cycle=state.cycle,
+        event_type=EventType.ANOMALY_DETECTED if opened else EventType.ANOMALY_RESOLVED,
+        severity=reading.severity if opened else Severity.INFO,
+        payload=payload,
+        ts=state.wall_ts,
+    )
+    return replace(state, seq=new_seq), event
 
 
 def fleet_summary(registry: TwinRegistry) -> FleetSummary:

@@ -224,6 +224,7 @@ class TwinRunner:
             "tick_p50_ms": round(latencies[len(latencies) // 2], 3) if latencies else 0.0,
             "tick_p99_ms": round(p99, 3),
             "uptime_s": round(time.perf_counter() - self._started_at, 1),
+            "inference": self.registry.inference.stats(),
         }
 
 
@@ -244,6 +245,7 @@ def _delta(registry: TwinRegistry, engine_id: uuid.UUID) -> dict[str, Any]:
         else None
     )
 
+    anomaly = runtime.anomaly
     return {
         "engine_id": str(engine_id),
         "external_ref": state.spec.external_ref,
@@ -265,6 +267,26 @@ def _delta(registry: TwinRegistry, engine_id: uuid.UUID) -> dict[str, Any]:
         "rul_p90": round(state.prediction.rul_p90 or 0.0, 1) if state.prediction else None,
         "model_id": state.prediction.model_id if state.prediction else None,
         "anomaly_score": round(state.anomaly_score, 3),
+        "anomaly": (
+            {
+                "score": round(anomaly.score, 2),
+                "severity": anomaly.severity.value,
+                "detector": anomaly.detector,
+                "module": anomaly.module.value if anomaly.module else None,
+                "alerting": anomaly.is_alerting,
+                "sensors": [
+                    {"sensor": key, "z": round(value, 2)} for key, value in anomaly.sensors[:5]
+                ],
+            }
+            if anomaly
+            else None
+        ),
+        "failure_prob": (
+            {str(k): round(v, 3) for k, v in state.prediction.failure_prob.items()}
+            if state.prediction
+            else {}
+        ),
+        "prediction_stale": state.prediction.stale if state.prediction else False,
         "sensors": {key: round(value, 3) for key, value in state.sensors.items()},
         "seq": state.seq,
     }
@@ -281,6 +303,8 @@ def _row(registry: TwinRegistry, engine_id: uuid.UUID) -> dict[str, Any]:
         if runtime.components
         else None
     )
+    anomaly = runtime.anomaly
+    prediction = state.prediction
     return {
         "engine_id": str(engine_id),
         "tail_number": state.spec.tail_number,
@@ -290,7 +314,12 @@ def _row(registry: TwinRegistry, engine_id: uuid.UUID) -> dict[str, Any]:
         "health_index": round(state.health_index, 2),
         "health_band": state.health_band.value,
         "worst_module": worst,
-        "rul_p50": round(state.prediction.rul_p50, 1) if state.prediction else None,
+        "rul_p50": round(prediction.rul_p50, 1) if prediction else None,
+        "rul_p10": round(prediction.rul_p10 or 0.0, 1) if prediction else None,
+        "rul_p90": round(prediction.rul_p90 or 0.0, 1) if prediction else None,
+        "model_backed": bool(prediction and prediction.model_id),
+        "anomaly_score": round(anomaly.score, 2) if anomaly else 0.0,
+        "anomaly_alerting": bool(anomaly and anomaly.is_alerting),
     }
 
 
@@ -324,10 +353,22 @@ def build_registry(
 
                 regime_model = load_models(regimes_path).get(subset)
 
+    from at_twin.inference import InferenceClient, load_production_models
+
+    # Load whatever the registry has promoted to PRODUCTION. An empty registry is
+    # not an error: the twin falls back to trend extrapolation and marks the
+    # prediction as model-less so the UI can say so honestly.
+    models = load_production_models(Path("models/registry.json"))
+    if models:
+        logger.info("models_loaded", subsets=sorted(models), count=len(models))
+    else:
+        logger.warning("no_production_models", detail="RUL will use trend fallback")
+
     return TwinRegistry(
         source,
         subset,
         clock=ReplayClock(speed=speed),
         phase_seed=42,
         regime_model=regime_model,
+        inference=InferenceClient(models=models),
     )

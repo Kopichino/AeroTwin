@@ -1,0 +1,24 @@
+{
+ "FD001": {
+  "n": 60,
+  "detected": 60,
+  "lead_median": 132.0,
+  "lead_p10": 88.4,
+  "fpr20": 0.059938461997035855,
+  "modules": {
+   "HPC": 60
+  },
+  "hpc_share": 1.0
+ },
+ "FD003": {
+  "n": 60,
+  "detected": 60,
+  "lead_median": 148.5,
+  "lead_p10": 110.0,
+  "fpr20": 0.08514890808369069,
+  "modules": {
+   "HPC": 60
+  },
+  "hpc_share": 1.0
+ }
+}
