@@ -1,0 +1,262 @@
+{
+  "components": {
+    "schemas": {
+      "ComponentStatus": {
+        "enum": [
+          "ok",
+          "degraded",
+          "down",
+          "skipped"
+        ],
+        "title": "ComponentStatus",
+        "type": "string"
+      },
+      "DependencyHealth": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComponentStatus"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "DependencyHealth",
+        "type": "object"
+      },
+      "LivenessResponse": {
+        "properties": {
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComponentStatus",
+            "default": "ok"
+          },
+          "uptime_s": {
+            "description": "Seconds since process start",
+            "title": "Uptime S",
+            "type": "number"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service",
+          "version",
+          "uptime_s"
+        ],
+        "title": "LivenessResponse",
+        "type": "object"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "dependencies": {
+            "items": {
+              "$ref": "#/components/schemas/DependencyHealth"
+            },
+            "title": "Dependencies",
+            "type": "array"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ComponentStatus"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "service",
+          "version",
+          "profile",
+          "dependencies"
+        ],
+        "title": "ReadinessResponse",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Agentic Digital Twin Platform for Aircraft Engine Predictive Maintenance.\n\nReplays the NASA C-MAPSS turbofan degradation dataset as live telemetry, maintains\nan event-sourced digital twin per engine, predicts Remaining Useful Life with deep\nmodels, detects anomalies, explains predictions, and reasons over the fleet with a\nLangGraph multi-agent system.",
+    "title": "AeroTwin API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health/deep": {
+      "get": {
+        "description": "Expose runtime configuration and subsystem state for operators.\n\nSecrets are never included -- only whether they are configured.",
+        "operationId": "deep_health_deep_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Deep Health Deep Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Deep diagnostic",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/live": {
+      "get": {
+        "description": "Return 200 whenever the process is running and the event loop is responsive.",
+        "operationId": "live_health_live_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LivenessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Liveness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Check every backing dependency.\n\nIn M1 the datastores are not yet wired, so they report ``skipped`` rather\nthan faking success. M2 replaces these with real connection checks.",
+        "operationId": "ready_health_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Readiness probe",
+        "tags": [
+          "health"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Liveness, readiness and deep diagnostics.",
+      "name": "health"
+    },
+    {
+      "description": "Fleet-wide listing, ranking and aggregates.",
+      "name": "fleet"
+    },
+    {
+      "description": "Individual twin state, telemetry and timeline.",
+      "name": "engines"
+    },
+    {
+      "description": "RUL predictions and explanations.",
+      "name": "predictions"
+    },
+    {
+      "description": "Anomaly detections and acknowledgement.",
+      "name": "anomalies"
+    },
+    {
+      "description": "Replay clock control (asynchronous commands).",
+      "name": "replay"
+    },
+    {
+      "description": "What-if scenario simulation.",
+      "name": "simulate"
+    },
+    {
+      "description": "Conversational engineering assistant.",
+      "name": "copilot"
+    },
+    {
+      "description": "Agent runs, traces and topology.",
+      "name": "agents"
+    },
+    {
+      "description": "RAG corpus search and documents.",
+      "name": "knowledge"
+    },
+    {
+      "description": "Work packages and scheduling.",
+      "name": "maintenance"
+    },
+    {
+      "description": "Operator tooling and system state.",
+      "name": "admin"
+    }
+  ]
+}

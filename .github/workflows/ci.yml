@@ -1,0 +1,177 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  FORCE_COLOR: "1"
+
+jobs:
+  # ── static analysis ─────────────────────────────────────────────────────────
+  lint-python:
+    name: Lint & type-check (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install workspace
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e libs/at_core -e libs/at_config -e libs/at_observability -e services/api
+          pip install ruff mypy import-linter pytest pytest-asyncio pytest-cov hypothesis httpx
+
+      - name: Ruff lint
+        run: ruff check . --output-format=github
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy (strict)
+        run: mypy -p at_core -p at_config -p at_observability -p at_api
+
+      - name: Architectural boundaries (import-linter)
+        # Enforces the layering in Doc 01 section 1.4. A broken contract is a
+        # build failure, not a review comment.
+        run: lint-imports
+
+  # ── tests ───────────────────────────────────────────────────────────────────
+  test-python:
+    name: Tests (Python)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: aerotwin
+          POSTGRES_PASSWORD: aerotwin
+          POSTGRES_DB: aerotwin_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U aerotwin"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+
+    env:
+      AT_PROFILE: ci
+      AT_POSTGRES_DSN: postgresql+asyncpg://aerotwin:aerotwin@localhost:5432/aerotwin_test
+      AT_REDIS_DSN: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install workspace
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e libs/at_core -e libs/at_config -e libs/at_observability -e services/api
+          pip install pytest pytest-asyncio pytest-cov hypothesis httpx
+
+      - name: Domain kernel must stay at 100 percent coverage
+        # The twin/health model is the heart of the platform (Doc 05 section 5.9).
+        run: pytest libs/at_core/tests --cov=at_core --cov-report=term-missing --cov-fail-under=100
+
+      - name: Full test suite
+        run: pytest --cov=at_core --cov=at_config --cov=at_api --cov-report=xml --cov-report=term
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-python
+          path: coverage.xml
+          if-no-files-found: warn
+
+  # ── API contract ────────────────────────────────────────────────────────────
+  openapi-contract:
+    name: OpenAPI schema is committed and current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install workspace
+        run: |
+          pip install -e libs/at_core -e libs/at_config -e libs/at_observability -e services/api
+
+      - name: Export OpenAPI schema
+        run: python tools/codegen/export_openapi.py --output docs/api/openapi.json
+
+      - name: Fail on uncommitted schema drift
+        # Doc 12 section 12.10 / NFR-12: the generated client must never diverge
+        # from the server. Drift is a build failure, not a runtime surprise.
+        run: |
+          if ! git diff --quiet --exit-code docs/api/openapi.json; then
+            echo "::error::openapi.json is out of date. Run 'make openapi' and commit the result."
+            git diff --stat docs/api/openapi.json
+            exit 1
+          fi
+          echo "OpenAPI schema is current."
+
+  # ── docker ──────────────────────────────────────────────────────────────────
+  build-images:
+    name: Build container images
+    runs-on: ubuntu-latest
+    needs: [lint-python, test-python]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Validate compose files
+        run: |
+          docker compose -f docker-compose.dev.yml config --quiet
+          echo "compose files are valid"
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/api/Dockerfile
+          target: runtime
+          push: false
+          load: true
+          tags: aerotwin/api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test the image
+        run: |
+          docker run -d --name api-smoke -p 8000:8000 aerotwin/api:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/health/live > /dev/null 2>&1; then
+              echo "API is live."
+              curl -fsS http://localhost:8000/health/ready | tee /dev/stderr
+              docker rm -f api-smoke
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::API failed to become healthy"
+          docker logs api-smoke
+          exit 1

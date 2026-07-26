@@ -1,0 +1,177 @@
+# Development profile: hot reload everywhere plus observability tooling.
+# Usage: make dev   (equivalent to: docker compose -f docker-compose.dev.yml up)
+#
+# Ports
+#   3000 web · 8000 api · 8001 inference · 8002 agent-runtime · 8003 chroma
+#   5432 postgres · 6379 redis · 16686 jaeger · 5050 pgadmin
+
+name: aerotwin-dev
+
+x-python-env: &python-env
+  AT_PROFILE: docker
+  AT_LOG_LEVEL: DEBUG
+  AT_LOG_JSON: "false"
+  AT_POSTGRES_DSN: postgresql+asyncpg://aerotwin:aerotwin@postgres:5432/aerotwin
+  AT_REDIS_DSN: redis://redis:6379/0
+  AT_CHROMA_HOST: chroma
+  AT_CHROMA_PORT: "8000"
+  AT_INFERENCE_URL: http://inference:8001
+  AT_OTEL_ENABLED: "true"
+  AT_OTEL_ENDPOINT: http://jaeger:4317
+  PYTHONUNBUFFERED: "1"
+
+services:
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    environment:
+      POSTGRES_USER: aerotwin
+      POSTGRES_PASSWORD: aerotwin
+      POSTGRES_DB: aerotwin
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aerotwin -d aerotwin"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports: ["6379:6379"]
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  chroma:
+    image: chromadb/chroma:0.5.20
+    ports: ["8003:8000"]
+    volumes: [chromadata:/chroma/chroma]
+    environment:
+      IS_PERSISTENT: "TRUE"
+      ANONYMIZED_TELEMETRY: "FALSE"
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+      target: dev
+    environment:
+      <<: *python-env
+      AT_SERVICE_NAME: api
+    command: >
+      uvicorn at_api.main:app --host 0.0.0.0 --port 8000 --reload
+      --reload-dir /app/services/api/src --reload-dir /app/libs
+    ports: ["8000:8000"]
+    volumes:
+      - ./services:/app/services
+      - ./libs:/app/libs
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Enabled from M3 onward. Declared now so the topology is reviewable.
+  twin-engine:
+    build:
+      context: .
+      dockerfile: services/twin_engine/Dockerfile
+      target: dev
+    environment:
+      <<: *python-env
+      AT_SERVICE_NAME: twin-engine
+      AT_SHARD_INDEX: "0"
+      AT_SHARD_COUNT: "1"
+      AT_REPLAY_SPEED: "1"
+    volumes:
+      - ./services:/app/services
+      - ./libs:/app/libs
+      - ./data:/app/data:ro
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    profiles: ["m3"]
+
+  inference:
+    build:
+      context: .
+      dockerfile: services/inference/Dockerfile
+      target: dev
+    environment:
+      <<: *python-env
+      AT_SERVICE_NAME: inference
+    ports: ["8001:8001"]
+    volumes:
+      - ./services:/app/services
+      - ./libs:/app/libs
+      - ./models:/app/models:ro
+    profiles: ["m5"]
+
+  agent-runtime:
+    build:
+      context: .
+      dockerfile: services/agent_runtime/Dockerfile
+      target: dev
+    environment:
+      <<: *python-env
+      AT_SERVICE_NAME: agent-runtime
+      AT_LLM_PROVIDER: ${AT_LLM_PROVIDER:-none}
+      AT_LLM_API_KEY: ${AT_LLM_API_KEY:-}
+    ports: ["8002:8002"]
+    volumes:
+      - ./services:/app/services
+      - ./libs:/app/libs
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    profiles: ["m10"]
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_WS_URL: ws://localhost:8000/ws/v1
+      WATCHPACK_POLLING: "true"
+    ports: ["3000:3000"]
+    volumes:
+      - ./apps/web:/app/apps/web
+      - ./packages:/app/packages
+      - /app/apps/web/node_modules
+      - /app/apps/web/.next
+    depends_on: [api]
+    profiles: ["m6"]
+
+  # ── developer tooling ──────────────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686", "4317:4317"]
+
+  pgadmin:
+    image: dpage/pgadmin4:8.13
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@aerotwin.local
+      PGADMIN_DEFAULT_PASSWORD: aerotwin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports: ["5050:80"]
+    depends_on: [postgres]
+    profiles: ["tools"]
+
+volumes:
+  pgdata:
+  redisdata:
+  chromadata:

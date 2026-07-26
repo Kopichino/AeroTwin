@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Environment & secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Data & artefacts (tracked via manifest, not committed)
+data/raw/**
+data/interim/**
+data/processed/**
+!data/**/.gitkeep
+!data/knowledge/manifest.yaml
+models/artifacts/**
+!models/registry.json
+experiments/
+mlruns/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json

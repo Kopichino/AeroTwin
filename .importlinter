@@ -1,0 +1,79 @@
+; Architectural boundary enforcement (Doc 01 section 1.4, Doc 03 section 3.13).
+; These contracts are the executable form of the layering diagram. A violation
+; fails CI, which is what stops the architecture eroding under delivery pressure.
+
+[importlinter]
+root_packages =
+    at_core
+    at_config
+    at_observability
+    at_api
+include_external_packages = True
+
+[importlinter:contract:domain-purity]
+name = Domain kernel is pure (no I/O, no frameworks, no service imports)
+type = forbidden
+source_modules =
+    at_core.domain
+    at_core.events
+forbidden_modules =
+    fastapi
+    starlette
+    sqlalchemy
+    redis
+    httpx
+    requests
+    pydantic
+    pydantic_settings
+    structlog
+    torch
+    numpy
+    pandas
+    at_api
+    at_config
+    at_observability
+; Rationale: at_core.domain must stay a pure, deterministic, dependency-free
+; kernel so the entire twin/health model is unit-testable with zero setup
+; (Doc 03 section 3.6 invariant). Note this deliberately forbids pydantic too --
+; wire schemas belong in at_contracts, not in the domain.
+
+[importlinter:contract:api-layering]
+name = API respects routers -> services -> repos -> infra
+type = layers
+layers =
+    routers | ws
+    services
+    repos
+    middleware
+containers =
+    at_api
+exhaustive = False
+; Rationale: prevents routers reaching straight into repositories, which is the
+; single most common way a clean FastAPI codebase turns into spaghetti.
+
+[importlinter:contract:config-independence]
+name = Config library depends on nothing internal
+type = forbidden
+source_modules =
+    at_config
+forbidden_modules =
+    at_core
+    at_api
+    at_observability
+
+[importlinter:contract:observability-independence]
+name = Observability library depends on nothing internal
+type = forbidden
+source_modules =
+    at_observability
+forbidden_modules =
+    at_core
+    at_api
+    at_config
+
+[importlinter:contract:no-cycles]
+name = No circular dependencies between top-level packages
+type = independence
+modules =
+    at_config
+    at_observability
