@@ -221,7 +221,7 @@ Full ADRs live in `docs/adr/`. Summary table:
 | ADR-010 | **Zustand (client/RT state) + TanStack Query (server state)** | Redux Toolkit, Jotai, Recoil | Clean split; WS deltas hit Zustand at 60 Hz without re-rendering Query cache |
 | ADR-011 | **Tailwind v4 + custom design tokens + Radix primitives** | MUI, Chakra, shadcn wholesale | Full control of the Linear/Stripe aesthetic; a11y from Radix |
 | ADR-012 | **Piecewise-linear RUL labels, R_early = 125** | linear RUL | C-MAPSS literature standard; makes NFR-8 comparable to published SOTA |
-| ADR-013 | **Sliding window 30 (FD001/3) / 20 (FD002/4)** | fixed 50 | Min test trajectory length in FD002 is 21 cycles; window must fit |
+| ADR-013 **(amended M2)** | **Sliding window 30 (FD001/3) / 20 (FD002) / 18 (FD004)** | fixed 50; uniform 20 | Empirical minimum test trajectory is 21 (FD002) but **19** (FD004) — 2 units would be unscoreable at W=20. Verified in M2, not assumed. |
 | ADR-014 | **Per-regime z-score normalization** | global min-max | Mandatory for 6-regime subsets; large accuracy delta |
 | ADR-015 | **Provider-abstracted LLM with `none` mode** | hard OpenAI dep | NFR-10: demo must never fail live |
 | ADR-016 | **Physics-informed component health from efficiency proxies** | arbitrary weighted sensor sum | R8: defensible to an aero examiner |

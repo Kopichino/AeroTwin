@@ -58,6 +58,17 @@ def test_subset_properties_match_dataset_facts() -> None:
     assert Subset.FD003.n_fault_modes == 2
     assert Subset.FD002.window_size == 20
     assert Subset.FD001.window_size == 30
+    # FD004 has two 19-cycle test units, so W=20 would make them unscoreable.
+    assert Subset.FD004.window_size == 18
+
+
+def test_window_never_exceeds_shortest_test_trajectory() -> None:
+    """The binding ADR-013 constraint, asserted for every subset."""
+    for subset in Subset:
+        assert subset.window_size <= subset.min_test_trajectory, (
+            f"{subset}: window {subset.window_size} exceeds shortest test "
+            f"trajectory {subset.min_test_trajectory}"
+        )
 
 
 # ── FSM ──────────────────────────────────────────────────────────────────────

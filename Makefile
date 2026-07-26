@@ -8,8 +8,9 @@ PY    := $(VENV)/bin/python
 PIP   := $(VENV)/bin/pip
 COMPOSE_DEV := docker compose -f docker-compose.dev.yml
 
-PY_PKGS := -p at_core -p at_config -p at_observability -p at_api
-EDITABLE := -e libs/at_core -e libs/at_config -e libs/at_observability -e services/api
+PY_PKGS := -p at_core -p at_config -p at_observability -p at_data -p at_persistence -p at_api
+EDITABLE := -e libs/at_core -e libs/at_config -e libs/at_observability \
+            -e libs/at_data -e libs/at_persistence -e services/api
 
 .PHONY: help
 help: ## Show this help
@@ -31,7 +32,7 @@ $(VENV)/bin/activate:
 install: $(VENV)/bin/activate ## Create the venv and install all workspace packages
 	$(PIP) install --quiet $(EDITABLE)
 	$(PIP) install --quiet pytest pytest-asyncio pytest-cov hypothesis httpx \
-		ruff mypy import-linter pyyaml
+		ruff mypy import-linter pyyaml aiosqlite
 	@echo "Workspace installed. Activate with: source $(VENV)/bin/activate"
 
 # ── quality gates ─────────────────────────────────────────────────────────────
@@ -73,6 +74,28 @@ cov: ## Full suite with a coverage report
 check: lint typecheck arch test ## Run every gate CI runs (do this before pushing)
 	@echo ""
 	@echo "  All quality gates passed."
+
+# ── data ──────────────────────────────────────────────────────────────────────
+
+.PHONY: data
+data: ## Download C-MAPSS, verify it, and build the Parquet interim layer
+	$(PY) -m at_data.acquire --dest data/raw/cmapss
+	$(PY) -c "from pathlib import Path; from at_data.parse import convert_all; \
+		print('Converting to Parquet:'); convert_all(Path('data/raw/cmapss'), Path('data/interim'))"
+	$(PY) -c "from pathlib import Path; from at_data.parse import load_parquet; \
+		from at_data.regimes import fit_regimes, save_models; from at_core.domain.enums import Subset; \
+		m={s: fit_regimes(load_parquet(s,'train',Path('data/interim')), s) for s in Subset}; \
+		save_models(m, Path('data/processed/regimes.json')); \
+		print('Regime models:', {k.value: f'{v.n_regimes} regimes, silhouette {v.silhouette:.4f}' for k,v in m.items()})"
+
+.PHONY: data-verify
+data-verify: ## Verify the dataset on disk without downloading
+	$(PY) -m at_data.acquire --verify-only --dest data/raw/cmapss
+
+.PHONY: eda
+eda: ## Regenerate docs/reports/eda.md from the interim layer
+	$(PY) -c "from pathlib import Path; from at_data.eda import build_report; \
+		print('wrote', build_report(Path('data/interim'), Path('docs/reports/eda.md')))"
 
 # ── api ───────────────────────────────────────────────────────────────────────
 

@@ -30,11 +30,31 @@ class Subset(StrEnum):
 
     @property
     def window_size(self) -> int:
-        """Sliding-window length for RUL models (ADR-013).
+        """Sliding-window length for RUL models (ADR-013, amended in M2).
 
-        FD002/FD004 use 20 because the shortest test trajectory is 21 cycles.
+        The binding constraint is the shortest *test* trajectory: a window longer
+        than it cannot be scored without padding. Measured against the real NASA
+        files rather than assumed from the literature:
+
+            FD001 min 31, FD003 min 38  -> 30
+            FD002 min 21                -> 20
+            FD004 min 19                -> 18  (2 units have only 19 cycles)
         """
-        return 20 if self in (Subset.FD002, Subset.FD004) else 30
+        if self is Subset.FD004:
+            return 18
+        if self is Subset.FD002:
+            return 20
+        return 30
+
+    @property
+    def min_test_trajectory(self) -> int:
+        """Shortest test trajectory, verified empirically in M2 ingestion."""
+        return {
+            Subset.FD001: 31,
+            Subset.FD002: 21,
+            Subset.FD003: 38,
+            Subset.FD004: 19,
+        }[self]
 
 
 class TwinStatus(StrEnum):

@@ -13,6 +13,7 @@ from at_core.domain.sensors import (
     SENSOR_BY_SYMBOL,
     SENSOR_SPECS,
     TRACKED_MODULES,
+    ZERO_VARIANCE_SENSORS,
     attribute_to_modules,
     dominant_module,
     informative_sensors,
@@ -52,10 +53,26 @@ def test_criticality_covers_every_tracked_module() -> None:
 
 
 def test_single_regime_subsets_drop_constant_sensors() -> None:
+    """Counts verified against the real NASA files during M2 ingestion."""
     fd001 = informative_sensors(Subset.FD001)
     assert len(fd001) == 14
     assert "s1" not in fd001
     assert "s3" in fd001
+
+    # FD003 keeps one more channel than FD001: epr (s10) is constant in FD001
+    # but varies in FD003 with |corr(RUL)| = 0.49, so dropping it loses signal.
+    fd003 = informative_sensors(Subset.FD003)
+    assert len(fd003) == 15
+    assert "s10" in fd003
+    assert "s10" not in informative_sensors(Subset.FD001)
+
+
+def test_zero_variance_sets_are_subset_specific() -> None:
+    """Guards against regressing to the single hardcoded list used in the literature."""
+    assert ZERO_VARIANCE_SENSORS[Subset.FD002] == frozenset()
+    assert ZERO_VARIANCE_SENSORS[Subset.FD004] == frozenset()
+    assert "s10" in ZERO_VARIANCE_SENSORS[Subset.FD001]
+    assert "s10" not in ZERO_VARIANCE_SENSORS[Subset.FD003]
 
 
 def test_multi_regime_subsets_keep_all_sensors() -> None:

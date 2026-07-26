@@ -69,6 +69,8 @@ mypy_path = [
     "libs/at_contracts/src",
     "libs/at_bus/src",
     "libs/at_persistence/src",
+    "libs/at_data/src",
+    "libs/at_persistence/src",
     "services/api/src",
     "services/twin_engine/src",
     "services/inference/src",

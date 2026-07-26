@@ -7,6 +7,8 @@ root_packages =
     at_core
     at_config
     at_observability
+    at_data
+    at_persistence
     at_api
 include_external_packages = True
 
@@ -70,6 +72,43 @@ forbidden_modules =
     at_core
     at_api
     at_config
+
+[importlinter:contract:domain-has-no-dataframes]
+name = Domain kernel never depends on pandas, numpy or SQLAlchemy
+type = forbidden
+source_modules =
+    at_core
+forbidden_modules =
+    pandas
+    numpy
+    sqlalchemy
+    at_data
+    at_persistence
+; Rationale: at_core is imported by every service including the latency-critical
+; twin engine. Pulling pandas into it would add ~100 MB and seconds of import time
+; to processes that only need value objects.
+
+[importlinter:contract:persistence-is-leaf]
+name = Persistence depends only on the domain
+type = forbidden
+source_modules =
+    at_persistence
+forbidden_modules =
+    at_api
+    at_data
+    fastapi
+
+[importlinter:contract:data-library-is-offline]
+name = Data preparation never imports web or persistence layers
+type = forbidden
+source_modules =
+    at_data
+forbidden_modules =
+    fastapi
+    at_api
+    at_persistence
+; Rationale: ingestion and EDA are offline batch concerns. Keeping them free of
+; the serving stack means the training image never needs FastAPI installed.
 
 [importlinter:contract:no-cycles]
 name = No circular dependencies between top-level packages

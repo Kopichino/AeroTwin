@@ -116,6 +116,17 @@ plus a draft maintenance work package.
 | FD003 | 100 | 100 | 1 | 2 (HPC + Fan) |
 | FD004 | 249 | 248 | 6 | 2 (HPC + Fan) |
 
+**Verified against the actual NASA files in M2** (`make data`), not quoted from literature:
+
+| Subset | Train rows | Test rows | Train min/max len | **Test min len** | RUL labels |
+|---|---:|---:|---:|---:|---:|
+| FD001 | 20,631 | 13,096 | 128 / 362 | 31 | 100 |
+| FD002 | 53,759 | 33,991 | 128 / 378 | **21** | 259 |
+| FD003 | 24,720 | 16,596 | 145 / 525 | 38 | 100 |
+| FD004 | 61,249 | 41,214 | 128 / 543 | **19** | 248 |
+
+Total 245,256 rows across 1,416 engine trajectories.
+
 Each row: `unit_number, time_in_cycles, op_setting_1..3, sensor_1..21`.
 
 **Sensor map** (needed for XAI naming and 3D module attribution):

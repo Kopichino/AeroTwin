@@ -66,11 +66,34 @@ SENSOR_BY_SYMBOL: Final[MappingProxyType[str, SensorSpec]] = MappingProxyType(
     {spec.symbol: spec for spec in SENSOR_SPECS}
 )
 
-#: Sensors that are constant in the single-condition subsets (FD001/FD003) and are
-#: therefore dropped by the variance filter. Retained for FD002/FD004 where regime
-#: variation makes them informative (Doc 07 section 7.2).
-CONSTANT_SENSORS_SINGLE_REGIME: Final[frozenset[str]] = frozenset(
-    {"s1", "s5", "s6", "s10", "s16", "s18", "s19"}
+#: Sensors with zero variance across the whole training split, measured directly
+#: from the NASA files in M2 (not taken from the literature, which commonly quotes
+#: a single seven-sensor list for all subsets -- that is wrong).
+#:
+#: Two findings that the common list gets wrong:
+#:   * ``s10`` (epr) is constant in FD001 but takes 4 values in FD003 with
+#:     |corr(RUL)| = 0.49. Dropping it discards real degradation signal.
+#:   * ``s6`` (P15) is near-constant but not constant (2 values in FD001,
+#:     17 in FD003); it is excluded on a signal basis, not a variance basis.
+ZERO_VARIANCE_SENSORS: Final[MappingProxyType[Subset, frozenset[str]]] = MappingProxyType(
+    {
+        Subset.FD001: frozenset({"s1", "s5", "s10", "s16", "s18", "s19"}),
+        Subset.FD002: frozenset(),
+        Subset.FD003: frozenset({"s1", "s5", "s16", "s18", "s19"}),
+        Subset.FD004: frozenset(),
+    }
+)
+
+#: Additionally excluded for single-regime subsets: measurable variance but
+#: negligible correlation with degradation (|corr(RUL)| < 0.15) and fewer than
+#: 20 distinct values, i.e. quantisation noise rather than signal.
+LOW_SIGNAL_SENSORS: Final[MappingProxyType[Subset, frozenset[str]]] = MappingProxyType(
+    {
+        Subset.FD001: frozenset({"s6"}),
+        Subset.FD002: frozenset(),
+        Subset.FD003: frozenset({"s6"}),
+        Subset.FD004: frozenset(),
+    }
 )
 
 #: Sensor -> module attribution weights (Doc 08 section 8.5). Each row sums to 1.0.
@@ -146,17 +169,20 @@ TRACKED_MODULES: Final[tuple[EngineModule, ...]] = (
 )
 
 
+def excluded_sensors(subset: Subset) -> frozenset[str]:
+    """Sensor keys dropped from the feature set for this subset."""
+    return ZERO_VARIANCE_SENSORS[subset] | LOW_SIGNAL_SENSORS[subset]
+
+
 def informative_sensors(subset: Subset) -> tuple[str, ...]:
     """Return the sensor keys that carry signal for the given subset.
 
-    Single-regime subsets drop the seven constant channels; multi-regime subsets
-    keep all 21 because operating-condition variation makes them informative.
+    Multi-regime subsets keep all 21 channels: operating-condition variation makes
+    even the otherwise-static channels informative once regime is accounted for.
+    Counts are FD001 14, FD002 21, FD003 15, FD004 21.
     """
-    if subset.n_conditions == 1:
-        return tuple(
-            spec.key for spec in SENSOR_SPECS if spec.key not in CONSTANT_SENSORS_SINGLE_REGIME
-        )
-    return tuple(spec.key for spec in SENSOR_SPECS)
+    dropped = excluded_sensors(subset)
+    return tuple(spec.key for spec in SENSOR_SPECS if spec.key not in dropped)
 
 
 def attribute_to_modules(sensor_scores: dict[str, float]) -> dict[EngineModule, float]:

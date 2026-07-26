@@ -53,7 +53,7 @@ informative. Feature set is recorded in the registry so serving can never mismat
 | `turb_eff_proxy` | `T50 / (Nc·k)` | physics-informed |
 | `flow_proxy` | `W31 + W32` | cooling-flow drift |
 
-**Windowing.** `W = 30` for FD001/FD003, `W = 20` for FD002/FD004 (ADR-013, min test length is 21).
+**Windowing.** `W = 30` for FD001/FD003, `W = 20` for FD002, `W = 18` for FD004 (ADR-013 as amended in M2). The constraint is the shortest *test* trajectory, which measurement showed to be 21 cycles for FD002 but **19** for FD004 — at W=20 two FD004 units could not be scored at all.
 Stride 1 in training. Test: last window per unit (the standard protocol). Short trajectories are
 edge-padded with a validity `mask` that the models consume.
 
