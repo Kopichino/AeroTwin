@@ -8,9 +8,9 @@ PY    := $(VENV)/bin/python
 PIP   := $(VENV)/bin/pip
 COMPOSE_DEV := docker compose -f docker-compose.dev.yml
 
-PY_PKGS := -p at_core -p at_config -p at_observability -p at_bus -p at_data -p at_persistence -p at_api -p at_twin
+PY_PKGS := -p at_ml -p at_core -p at_config -p at_observability -p at_bus -p at_data -p at_persistence -p at_api -p at_twin
 EDITABLE := -e libs/at_core -e libs/at_config -e libs/at_observability \
-            -e libs/at_bus -e libs/at_data -e libs/at_persistence -e services/api -e services/twin_engine
+            -e libs/at_bus -e libs/at_data -e ml -e libs/at_persistence -e services/api -e services/twin_engine
 
 .PHONY: help
 help: ## Show this help
@@ -108,6 +108,14 @@ demo: ## Run the full live platform: API + twins + dashboard on :8000
 .PHONY: monitor
 monitor: ## Live terminal fleet monitor (M3 twin engine demo)
 	$(PY) -m at_twin.monitor --subset FD002 --speed 8 --duration 60
+
+.PHONY: train
+train: ## Train and compare every RUL architecture, then register the winner
+	$(PY) -c "from pathlib import Path; from at_core.domain.enums import Subset; \
+		from at_ml.compare import run_comparison, build_report, save_results; \
+		runs=[run_comparison(Subset.FD001, Path('data/interim'), epochs=30)]; \
+		build_report(runs, Path('docs/reports/model-comparison.md')); \
+		save_results(runs, Path('models/comparison.json'))"
 
 # ── api ───────────────────────────────────────────────────────────────────────
 

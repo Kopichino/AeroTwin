@@ -12,6 +12,7 @@ root_packages =
     at_bus
     at_api
     at_twin
+    at_ml
 include_external_packages = True
 
 [importlinter:contract:domain-purity]
@@ -138,6 +139,20 @@ forbidden_modules =
 ; Rationale: the bus moves opaque envelopes. Keeping it ignorant of twin types is
 ; what allows the Redis and in-memory adapters to be swapped freely, and what will
 ; let agent and simulation traffic reuse it unchanged.
+
+[importlinter:contract:training-is-offline]
+name = Training code never enters the serving path
+type = forbidden
+source_modules =
+    at_ml
+forbidden_modules =
+    fastapi
+    at_api
+    at_twin
+; Rationale: the serving image must not carry torch training utilities, pandas or
+; the research stack. The model registry is the only interface between training
+; and serving (Doc 07 section 7.8), which is what keeps the inference container
+; small and its dependencies stable.
 
 [importlinter:contract:no-cycles]
 name = No circular dependencies between top-level packages
