@@ -6,7 +6,10 @@ Three ways to see it, fastest first.
 
 ## 1. Instant preview — no install
 
-Open **`docs/preview/dashboard-preview.html`** in any browser.
+Open either file in any browser:
+
+- **`docs/preview/fleet-ui-preview.html`** — the Next.js fleet UI
+- **`docs/preview/dashboard-preview.html`** — the zero-dependency fallback
 
 A static snapshot of the real dashboard with genuine twin state baked in: 260
 FD002 engines after 700 replay ticks, physics-derived component health, and the
@@ -14,7 +17,28 @@ worst-module attribution. Nothing to install, nothing to run.
 
 ---
 
-## 2. Live locally — Python only (recommended)
+## 2. The real UI (Next.js) — recommended
+
+Two terminals:
+
+```bash
+# terminal 1 — backend, twins, websocket
+make install && make data && make demo
+
+# terminal 2 — frontend
+make web-install && make web
+```
+
+Open **http://localhost:3000/fleet**.
+
+Sortable fleet table, band filters, search, anomalies-only toggle, live KPI
+tiles and a connection badge that shows reconnect attempts honestly.
+
+`make web-check` runs typecheck, unit tests and a production build.
+
+---
+
+## 3. Backend only — Python, no Node
 
 ```bash
 cd aero-twin
@@ -27,7 +51,7 @@ Then open:
 
 | URL | What it is |
 |---|---|
-| **http://localhost:8000/dashboard** | Live fleet, updating over WebSocket |
+| **http://localhost:8000/dashboard** | Zero-dependency fallback dashboard (no Node needed) |
 | http://localhost:8000/docs | Interactive OpenAPI explorer |
 | http://localhost:8000/api/v1/fleet | Raw fleet JSON |
 | http://localhost:8000/health/ready | Readiness probe |
@@ -47,7 +71,7 @@ make monitor        # ANSI fleet dashboard, no browser needed
 
 ---
 
-## 3. Docker
+## 4. Docker
 
 ```bash
 docker compose up --build
