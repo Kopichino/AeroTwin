@@ -32,7 +32,7 @@ $(VENV)/bin/activate:
 install: $(VENV)/bin/activate ## Create the venv and install all workspace packages
 	$(PIP) install --quiet $(EDITABLE)
 	$(PIP) install --quiet pytest pytest-asyncio pytest-cov hypothesis httpx \
-		ruff mypy import-linter pyyaml aiosqlite
+		ruff mypy import-linter pyyaml aiosqlite pandas-stubs
 	@echo "Workspace installed. Activate with: source $(VENV)/bin/activate"
 
 # ── quality gates ─────────────────────────────────────────────────────────────
@@ -96,6 +96,22 @@ data-verify: ## Verify the dataset on disk without downloading
 eda: ## Regenerate docs/reports/eda.md from the interim layer
 	$(PY) -c "from pathlib import Path; from at_data.eda import build_report; \
 		print('wrote', build_report(Path('data/interim'), Path('docs/reports/eda.md')))"
+
+.PHONY: web
+web: ## Run the Next.js frontend (needs `make demo` in another terminal)
+	cd apps/web && npm run dev
+
+.PHONY: web-install
+web-install: ## Install frontend dependencies
+	cd apps/web && npm install --no-audit --no-fund
+
+.PHONY: web-test
+web-test: ## Frontend unit tests
+	cd apps/web && npx vitest run
+
+.PHONY: web-check
+web-check: ## Frontend typecheck + tests + production build
+	cd apps/web && npx tsc --noEmit && npx vitest run && npx next build
 
 .PHONY: demo
 demo: ## Run the full live platform: API + twins + dashboard on :8000

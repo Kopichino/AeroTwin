@@ -41,3 +41,6 @@ mlruns/
 .idea/
 .vscode/*
 !.vscode/settings.json
+
+# Local pip build scratch (/tmp is a small tmpfs here)
+.tmp/

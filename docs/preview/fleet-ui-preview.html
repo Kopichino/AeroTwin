@@ -1,0 +1,415 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>AeroTwin — Fleet Control</title>
+<style>
+
+
+
+/* Design tokens (Doc 06 section 6.4). Declared once here and referenced through
+   Tailwind, so a theme change never becomes a find-and-replace. */
+:root {
+  --bg-base: #07080b;
+  --bg-elevated: #0d0f14;
+  --bg-glass: rgba(255, 255, 255, 0.04);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #f2f4f8;
+  --text-secondary: #9ba3b4;
+  --text-tertiary: #5c6475;
+
+  --accent: #4f8dfd;
+  --accent-glow: rgba(79, 141, 253, 0.2);
+  --health-good: #22c98a;
+  --health-watch: #7fd1a6;
+  --health-warn: #f5b942;
+  --health-crit: #ff4d4d;
+  --anomaly: #a855f7;
+}
+
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    background-image: radial-gradient(
+      1200px 600px at 15% -10%,
+      var(--accent-glow),
+      transparent 60%
+    );
+    min-height: 100vh;
+  }
+
+  /* Visible focus for keyboard users only; WCAG 2.4.7 without the mouse noise. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+
+  .glass-panel {
+    background: linear-gradient(180deg, var(--bg-elevated), rgba(13, 15, 20, 0.6));
+    border: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+/* Every animation in the app respects this. Doc 06 section 6.4. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Inter,system-ui,sans-serif;padding:24px;font-size:14px}
+.wrap{max-width:1500px;margin:0 auto}
+header{display:flex;align-items:baseline;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+h1{font-size:20px;font-weight:600;letter-spacing:-.02em}
+.badge{font:11px/1 'JetBrains Mono',monospace;padding:5px 10px;border-radius:6px;background:var(--bg-glass);border:1px solid var(--border-subtle);color:var(--text-secondary)}
+.live{color:var(--health-good);border-color:rgba(34,201,138,.35)}
+.dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:6px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin-bottom:16px}
+.tile{background:linear-gradient(180deg,var(--bg-elevated),rgba(13,15,20,.6));border:1px solid var(--border-subtle);border-radius:10px;padding:14px 16px;box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-tertiary)}
+.val{font:600 24px/1.2 'JetBrains Mono',monospace;margin-top:6px;font-variant-numeric:tabular-nums}
+.sub{font-size:11px;color:var(--text-tertiary);margin-top:2px}
+.bands{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.band{flex:1;min-width:130px;background:linear-gradient(180deg,var(--bg-elevated),rgba(13,15,20,.6));border:1px solid var(--border-subtle);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;color:inherit;font:inherit;cursor:pointer}
+.sw{width:8px;height:8px;border-radius:50%} .bl{font-size:12px;color:var(--text-secondary)}
+.bn{margin-left:auto;font:600 16px 'JetBrains Mono',monospace}
+.controls{display:flex;gap:12px;margin-bottom:16px;align-items:center}
+input,.btn{border:1px solid var(--border-subtle);background:var(--bg-glass);border-radius:10px;padding:8px 12px;color:var(--text-primary);font:inherit;font-size:13px}
+.btn{font-size:12px;color:var(--text-secondary);cursor:pointer}
+.panel{background:linear-gradient(180deg,var(--bg-elevated),rgba(13,15,20,.6));border:1px solid var(--border-subtle);border-radius:10px;overflow:hidden}
+.ptitle{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border-subtle)}
+.ptitle h2{font-size:13px;font-weight:600} .ptitle span{margin-left:auto;font-size:11px;color:var(--text-tertiary)}
+table{width:100%;border-collapse:collapse}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary);text-align:left;padding:10px 12px;border-bottom:1px solid var(--border-subtle);font-weight:600}
+td{padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+tbody tr:hover{background:rgba(255,255,255,.03)}
+.num{text-align:right;font-variant-numeric:tabular-nums} .mono{font:12px 'JetBrains Mono',monospace}
+.dim{color:var(--text-tertiary);font:11px 'JetBrains Mono',monospace} .dim2{color:var(--text-secondary);font:11px 'JetBrains Mono',monospace}
+.bar{position:relative;height:6px;width:96px;border-radius:3px;background:rgba(255,255,255,.07);overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;border-radius:3px}
+.pill{display:inline-flex;align-items:center;gap:6px;font:10px 'JetBrains Mono',monospace;padding:4px 8px;border-radius:6px;letter-spacing:.03em}
+.sw2{width:6px;height:6px;border-radius:50%}
+.chip{font:11px 'JetBrains Mono',monospace;padding:3px 6px;border-radius:4px}
+footer{margin-top:20px;text-align:center;font-size:11px;color:var(--text-tertiary)}
+code{font:11px 'JetBrains Mono',monospace;background:var(--bg-glass);padding:2px 5px;border-radius:4px}
+</style></head><body><div class="wrap">
+<header><h1>AeroTwin</h1>
+<span class="badge live"><span class="dot"></span>live</span>
+<span class="badge">1859 ticks · up 233.0s</span>
+<span class="badge">tick p50 39.078ms · p99 70.021ms</span></header>
+<div class="kpis">
+<div class="tile"><div class="lbl">Engines</div><div class="val">100</div><div class="sub">100 running</div></div>
+<div class="tile"><div class="lbl">Fleet health</div><div class="val" style="color:var(--health-watch)">64.0</div><div class="sub">virtual cycle 1864</div></div>
+<div class="tile"><div class="lbl">At risk</div><div class="val" style="color:var(--health-warn)">33</div><div class="sub">warning + critical</div></div>
+<div class="tile"><div class="lbl">Anomalies</div><div class="val" style="color:var(--anomaly)">77</div><div class="sub">engines alerting</div></div>
+<div class="tile"><div class="lbl">Model coverage</div><div class="val">91/100</div><div class="sub">1767 calls · 6.127ms</div></div>
+</div>
+<div class="bands"><button class="band"><span class="sw" style="background:var(--health-good)"></span>
+    <span class="bl">Healthy</span><span class="bn" style="color:var(--health-good)">20</span></button><button class="band"><span class="sw" style="background:var(--health-watch)"></span>
+    <span class="bl">Watch</span><span class="bn" style="color:var(--health-watch)">47</span></button><button class="band"><span class="sw" style="background:var(--health-warn)"></span>
+    <span class="bl">Warning</span><span class="bn" style="color:var(--health-warn)">25</span></button><button class="band"><span class="sw" style="background:var(--health-crit)"></span>
+    <span class="bl">Critical</span><span class="bn" style="color:var(--health-crit)">8</span></button></div>
+<div class="controls"><input placeholder="Search tail or unit…" value=""><button class="btn">Anomalies only</button></div>
+<div class="panel"><div class="ptitle"><h2>Fleet</h2><span>100 engines</span></div>
+<table><thead><tr><th>Tail</th><th class="num">Unit</th><th class="num">Cycle</th><th class="num">Health ↑</th>
+<th>Condition</th><th>Band</th><th>Worst module</th><th class="num">RUL</th><th class="num">80% interval</th><th class="num">Anomaly</th></tr></thead>
+<tbody><tr>
+<td class="mono">AT-0005-6</td><td class="num dim">5</td><td class="num">267</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">14.3</td>
+<td><div class="bar"><i style="width:14%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">1</td>
+<td class="num mono dim">0–10</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">18.2</span></td></tr><tr>
+<td class="mono">AT-0010-8</td><td class="num dim">10</td><td class="num">221</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">19.3</td>
+<td><div class="bar"><i style="width:19%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">3</td>
+<td class="num mono dim">0–12</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">18.6</span></td></tr><tr>
+<td class="mono">AT-0047-8</td><td class="num dim">47</td><td class="num">207</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">20.7</td>
+<td><div class="bar"><i style="width:21%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">4</td>
+<td class="num mono dim">0–14</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0044-9</td><td class="num dim">44</td><td class="num">190</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">20.8</td>
+<td><div class="bar"><i style="width:21%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">2</td>
+<td class="num mono dim">0–11</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0098-11</td><td class="num dim">98</td><td class="num">151</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">23.6</td>
+<td><div class="bar"><i style="width:24%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">3</td>
+<td class="num mono dim">0–12</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0042-9</td><td class="num dim">42</td><td class="num">195</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">24.0</td>
+<td><div class="bar"><i style="width:24%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">1</td>
+<td class="num mono dim">0–11</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0056-6</td><td class="num dim">56</td><td class="num">270</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">29.6</td>
+<td><div class="bar"><i style="width:30%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">1</td>
+<td class="num mono dim">0–10</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">31.2</span></td></tr><tr>
+<td class="mono">AT-0073-8</td><td class="num dim">73</td><td class="num">208</td>
+<td class="num" style="color:var(--health-crit);font-weight:600">31.7</td>
+<td><div class="bar"><i style="width:32%;background:var(--health-crit)"></i></div></td>
+<td><span class="pill" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)"><span class="sw2" style="background:var(--health-crit)"></span>CRITICAL</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">1</td>
+<td class="num mono dim">0–11</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0069-5</td><td class="num dim">69</td><td class="num">332</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">35.7</td>
+<td><div class="bar"><i style="width:36%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">23</td>
+<td class="num mono dim">13–32</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0057-13</td><td class="num dim">57</td><td class="num">126</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">35.9</td>
+<td><div class="bar"><i style="width:36%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">9</td>
+<td class="num mono dim">0–19</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0021-9</td><td class="num dim">21</td><td class="num">185</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">36.5</td>
+<td><div class="bar"><i style="width:37%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">LPT</td>
+<td class="num">6</td>
+<td class="num mono dim">0–15</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">20.7</span></td></tr><tr>
+<td class="mono">AT-0024-12</td><td class="num dim">24</td><td class="num">133</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">37.3</td>
+<td><div class="bar"><i style="width:37%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">14</td>
+<td class="num mono dim">5–24</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0041-8</td><td class="num dim">41</td><td class="num">193</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">38.6</td>
+<td><div class="bar"><i style="width:39%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">24</td>
+<td class="num mono dim">14–33</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">13.9</span></td></tr><tr>
+<td class="mono">AT-0052-8</td><td class="num dim">52</td><td class="num">189</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">39.3</td>
+<td><div class="bar"><i style="width:39%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">18</td>
+<td class="num mono dim">9–28</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0081-7</td><td class="num dim">81</td><td class="num">215</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">39.7</td>
+<td><div class="bar"><i style="width:40%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">17</td>
+<td class="num mono dim">8–27</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0013-11</td><td class="num dim">13</td><td class="num">151</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">41.0</td>
+<td><div class="bar"><i style="width:41%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">7</td>
+<td class="num mono dim">0–16</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">16.9</span></td></tr><tr>
+<td class="mono">AT-0036-11</td><td class="num dim">36</td><td class="num">134</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">45.1</td>
+<td><div class="bar"><i style="width:45%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">25</td>
+<td class="num mono dim">15–34</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0019-11</td><td class="num dim">19</td><td class="num">135</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">45.6</td>
+<td><div class="bar"><i style="width:46%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">18</td>
+<td class="num mono dim">8–27</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0045-11</td><td class="num dim">45</td><td class="num">135</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">45.9</td>
+<td><div class="bar"><i style="width:46%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">26</td>
+<td class="num mono dim">16–35</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0049-8</td><td class="num dim">49</td><td class="num">180</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">47.0</td>
+<td><div class="bar"><i style="width:47%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">28</td>
+<td class="num mono dim">18–38</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0012-11</td><td class="num dim">12</td><td class="num">134</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">50.6</td>
+<td><div class="bar"><i style="width:51%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">34</td>
+<td class="num mono dim">23–44</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0096-6</td><td class="num dim">96</td><td class="num">18</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">50.8</td>
+<td><div class="bar"><i style="width:51%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">NOZZLE</td>
+<td class="num">1</td>
+<td class="num mono dim">0–10</td><td class="num"><span class="dim">2.4</span></td></tr><tr>
+<td class="mono">AT-0058-12</td><td class="num dim">58</td><td class="num">117</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">50.9</td>
+<td><div class="bar"><i style="width:51%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">34</td>
+<td class="num mono dim">23–44</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0002-7</td><td class="num dim">2</td><td class="num">33</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">51.5</td>
+<td><div class="bar"><i style="width:51%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">NOZZLE</td>
+<td class="num">119</td>
+<td class="num mono dim">100–138</td><td class="num"><span class="dim">3.4</span></td></tr><tr>
+<td class="mono">AT-0053-10</td><td class="num dim">53</td><td class="num">35</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">51.7</td>
+<td><div class="bar"><i style="width:52%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">COMBUSTOR</td>
+<td class="num">114</td>
+<td class="num mono dim">95–133</td><td class="num"><span class="chip" style="color:var(--anomaly);background:color-mix(in srgb, var(--anomaly) 12%, transparent)">7.9</span></td></tr><tr>
+<td class="mono">AT-0034-9</td><td class="num dim">34</td><td class="num">155</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">52.9</td>
+<td><div class="bar"><i style="width:53%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">31</td>
+<td class="num mono dim">21–41</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0095-6</td><td class="num dim">95</td><td class="num">229</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">53.3</td>
+<td><div class="bar"><i style="width:53%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">60</td>
+<td class="num mono dim">46–72</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0029-11</td><td class="num dim">29</td><td class="num">122</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">54.6</td>
+<td><div class="bar"><i style="width:55%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">LPT</td>
+<td class="num">37</td>
+<td class="num mono dim">26–48</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0063-10</td><td class="num dim">63</td><td class="num">135</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">54.7</td>
+<td><div class="bar"><i style="width:55%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">44</td>
+<td class="num mono dim">32–55</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0023-11</td><td class="num dim">23</td><td class="num">124</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">55.2</td>
+<td><div class="bar"><i style="width:55%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">42</td>
+<td class="num mono dim">31–54</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0090-12</td><td class="num dim">90</td><td class="num">113</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">56.5</td>
+<td><div class="bar"><i style="width:56%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPT</td>
+<td class="num">41</td>
+<td class="num mono dim">30–53</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0055-9</td><td class="num dim">55</td><td class="num">152</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">57.1</td>
+<td><div class="bar"><i style="width:57%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">44</td>
+<td class="num mono dim">32–55</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.8</span></td></tr><tr>
+<td class="mono">AT-0088-8</td><td class="num dim">88</td><td class="num">160</td>
+<td class="num" style="color:var(--health-warn);font-weight:600">57.1</td>
+<td><div class="bar"><i style="width:57%;background:var(--health-warn)"></i></div></td>
+<td><span class="pill" style="color:var(--health-warn);background:color-mix(in srgb, var(--health-warn) 12%, transparent)"><span class="sw2" style="background:var(--health-warn)"></span>WARNING</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">52</td>
+<td class="num mono dim">39–64</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0008-12</td><td class="num dim">8</td><td class="num">95</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">59.0</td>
+<td><div class="bar"><i style="width:59%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">54</td>
+<td class="num mono dim">41–66</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0018-9</td><td class="num dim">18</td><td class="num">148</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">59.7</td>
+<td><div class="bar"><i style="width:60%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">56</td>
+<td class="num mono dim">44–69</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0064-6</td><td class="num dim">64</td><td class="num">219</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">59.7</td>
+<td><div class="bar"><i style="width:60%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">LPT</td>
+<td class="num">63</td>
+<td class="num mono dim">49–76</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0086-6</td><td class="num dim">86</td><td class="num">216</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">60.1</td>
+<td><div class="bar"><i style="width:60%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">LPT</td>
+<td class="num">58</td>
+<td class="num mono dim">46–71</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0039-14</td><td class="num dim">39</td><td class="num">83</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">60.5</td>
+<td><div class="bar"><i style="width:61%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">LPT</td>
+<td class="num">56</td>
+<td class="num mono dim">44–69</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr><tr>
+<td class="mono">AT-0091-14</td><td class="num dim">91</td><td class="num">63</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">62.6</td>
+<td><div class="bar"><i style="width:63%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">72</td>
+<td class="num mono dim">58–87</td><td class="num"><span class="chip" style="color:var(--anomaly);background:color-mix(in srgb, var(--anomaly) 12%, transparent)">8.1</span></td></tr><tr>
+<td class="mono">AT-0059-8</td><td class="num dim">59</td><td class="num">160</td>
+<td class="num" style="color:var(--health-watch);font-weight:600">62.7</td>
+<td><div class="bar"><i style="width:63%;background:var(--health-watch)"></i></div></td>
+<td><span class="pill" style="color:var(--health-watch);background:color-mix(in srgb, var(--health-watch) 12%, transparent)"><span class="sw2" style="background:var(--health-watch)"></span>WATCH</span></td>
+<td class="mono dim2">HPC</td>
+<td class="num">63</td>
+<td class="num mono dim">50–77</td><td class="num"><span class="chip" style="color:var(--health-crit);background:color-mix(in srgb, var(--health-crit) 12%, transparent)">12.0</span></td></tr></tbody></table></div>
+<footer>Live digital twins replaying NASA C-MAPSS · physics-informed component health ·
+deep RUL with conformal 80% intervals · <code>*</code> = trend estimate, no model</footer>
+</div></body></html>

@@ -1,0 +1,73 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design tokens (Doc 06 section 6.4). Declared once here and referenced through
+   Tailwind, so a theme change never becomes a find-and-replace. */
+:root {
+  --bg-base: #07080b;
+  --bg-elevated: #0d0f14;
+  --bg-glass: rgba(255, 255, 255, 0.04);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+
+  --text-primary: #f2f4f8;
+  --text-secondary: #9ba3b4;
+  --text-tertiary: #5c6475;
+
+  --accent: #4f8dfd;
+  --accent-glow: rgba(79, 141, 253, 0.2);
+  --health-good: #22c98a;
+  --health-watch: #7fd1a6;
+  --health-warn: #f5b942;
+  --health-crit: #ff4d4d;
+  --anomaly: #a855f7;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    background-image: radial-gradient(
+      1200px 600px at 15% -10%,
+      var(--accent-glow),
+      transparent 60%
+    );
+    min-height: 100vh;
+  }
+
+  /* Visible focus for keyboard users only; WCAG 2.4.7 without the mouse noise. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    background: linear-gradient(180deg, var(--bg-elevated), rgba(13, 15, 20, 0.6));
+    border: 1px solid var(--border-subtle);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Every animation in the app respects this. Doc 06 section 6.4. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
