@@ -21,18 +21,21 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency metadata first so the layer cache survives source edits.
-COPY libs/at_core/pyproject.toml           libs/at_core/
-COPY libs/at_config/pyproject.toml         libs/at_config/
-COPY libs/at_observability/pyproject.toml  libs/at_observability/
-COPY services/api/pyproject.toml           services/api/
-
 COPY libs/ libs/
 COPY services/api/ services/api/
+COPY services/twin_engine/ services/twin_engine/
 
-RUN pip install --no-cache-dir \
+# numpy and pandas are needed by the data and twin libraries; installed here so
+# the layer caches independently of application source changes.
+RUN pip install --no-cache-dir "numpy>=2.0" "pandas>=2.2" "pyarrow>=17.0" \
+    && pip install --no-cache-dir \
         -e libs/at_core \
         -e libs/at_config \
         -e libs/at_observability \
+        -e libs/at_bus \
+        -e libs/at_data \
+        -e libs/at_persistence \
+        -e services/twin_engine \
         -e services/api
 
 # ── development ───────────────────────────────────────────────────────────────

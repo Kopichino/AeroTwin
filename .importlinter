@@ -9,6 +9,7 @@ root_packages =
     at_observability
     at_data
     at_persistence
+    at_bus
     at_api
     at_twin
 include_external_packages = True
@@ -122,6 +123,21 @@ forbidden_modules =
     at_api
 ; Rationale: the twin engine is a headless worker process. If it ever needs to
 ; expose HTTP it does so via the bus and the API service, never by importing them.
+
+[importlinter:contract:bus-is-transport-only]
+name = Bus library knows nothing about the domain it carries
+type = forbidden
+source_modules =
+    at_bus
+forbidden_modules =
+    at_twin
+    at_api
+    at_persistence
+    at_data
+    fastapi
+; Rationale: the bus moves opaque envelopes. Keeping it ignorant of twin types is
+; what allows the Redis and in-memory adapters to be swapped freely, and what will
+; let agent and simulation traffic reuse it unchanged.
 
 [importlinter:contract:no-cycles]
 name = No circular dependencies between top-level packages

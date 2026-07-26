@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     max_ws_connections_per_user: int = 3
 
     # ── replay / twin ────────────────────────────────────────────────────────
+    twin_subset: str = "FD002"
+    twin_synthetic: bool = False
+    """Run against generated telemetry instead of C-MAPSS (no dataset needed)."""
+    interim_dir: str = "data/interim"
+    tick_hz: float = 8.0
     replay_speed: float = 1.0
     cycle_duration_ms: int = 1000
     shard_index: int = 0

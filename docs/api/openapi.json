@@ -50,6 +50,19 @@
         "title": "DependencyHealth",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "LivenessResponse": {
         "properties": {
           "service": {
@@ -112,6 +125,46 @@
         ],
         "title": "ReadinessResponse",
         "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
       }
     }
   },
@@ -122,6 +175,328 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v1/engines/{engine_ref}": {
+      "get": {
+        "description": "Full twin state. Accepts a UUID, a unit number, or an external ref.",
+        "operationId": "get_engine_api_v1_engines__engine_ref__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engine_ref",
+            "required": true,
+            "schema": {
+              "title": "Engine Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Engine Api V1 Engines  Engine Ref  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Twin detail",
+        "tags": [
+          "fleet",
+          "engines"
+        ]
+      }
+    },
+    "/api/v1/engines/{engine_ref}/commands/{command}": {
+      "post": {
+        "description": "Queue a control command. Asynchronous by design (single-writer rule).",
+        "operationId": "send_command_api_v1_engines__engine_ref__commands__command__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engine_ref",
+            "required": true,
+            "schema": {
+              "title": "Engine Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "command",
+            "required": true,
+            "schema": {
+              "title": "Command",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Send Command Api V1 Engines  Engine Ref  Commands  Command  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Send Command",
+        "tags": [
+          "fleet",
+          "replay"
+        ]
+      }
+    },
+    "/api/v1/fleet": {
+      "get": {
+        "description": "Paginated fleet listing with sorting and filtering.",
+        "operationId": "list_fleet_api_v1_fleet_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "health",
+              "enum": [
+                "health",
+                "rul",
+                "cycle",
+                "unit",
+                "priority"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "order",
+            "required": false,
+            "schema": {
+              "default": "asc",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "title": "Order",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Comma-separated health bands",
+            "in": "query",
+            "name": "band",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated health bands",
+              "title": "Band"
+            }
+          },
+          {
+            "description": "Match tail number or unit",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Match tail number or unit",
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "size",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Size",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Fleet Api V1 Fleet Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "List the fleet",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/v1/fleet/summary": {
+      "get": {
+        "operationId": "fleet_summary_endpoint_api_v1_fleet_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Fleet Summary Endpoint Api V1 Fleet Summary Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Fleet KPIs",
+        "tags": [
+          "fleet"
+        ]
+      }
+    },
+    "/api/v1/system": {
+      "get": {
+        "operationId": "system_stats_api_v1_system_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response System Stats Api V1 System Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Engine runtime statistics",
+        "tags": [
+          "fleet",
+          "admin"
+        ]
+      }
+    },
     "/health/deep": {
       "get": {
         "description": "Expose runtime configuration and subsystem state for operators.\n\nSecrets are never included -- only whether they are configured.",

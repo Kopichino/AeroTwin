@@ -8,9 +8,9 @@ PY    := $(VENV)/bin/python
 PIP   := $(VENV)/bin/pip
 COMPOSE_DEV := docker compose -f docker-compose.dev.yml
 
-PY_PKGS := -p at_core -p at_config -p at_observability -p at_data -p at_persistence -p at_api -p at_twin
+PY_PKGS := -p at_core -p at_config -p at_observability -p at_bus -p at_data -p at_persistence -p at_api -p at_twin
 EDITABLE := -e libs/at_core -e libs/at_config -e libs/at_observability \
-            -e libs/at_data -e libs/at_persistence -e services/api -e services/twin_engine
+            -e libs/at_bus -e libs/at_data -e libs/at_persistence -e services/api -e services/twin_engine
 
 .PHONY: help
 help: ## Show this help
@@ -96,6 +96,14 @@ data-verify: ## Verify the dataset on disk without downloading
 eda: ## Regenerate docs/reports/eda.md from the interim layer
 	$(PY) -c "from pathlib import Path; from at_data.eda import build_report; \
 		print('wrote', build_report(Path('data/interim'), Path('docs/reports/eda.md')))"
+
+.PHONY: demo
+demo: ## Run the full live platform: API + twins + dashboard on :8000
+	@echo ""
+	@echo "  Dashboard  http://localhost:8000/dashboard"
+	@echo "  API docs   http://localhost:8000/docs"
+	@echo ""
+	$(VENV)/bin/uvicorn at_api.main:app --host 0.0.0.0 --port 8000
 
 .PHONY: monitor
 monitor: ## Live terminal fleet monitor (M3 twin engine demo)
