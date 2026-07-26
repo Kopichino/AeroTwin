@@ -73,6 +73,7 @@ mypy_path = [
     "libs/at_persistence/src",
     "services/api/src",
     "services/twin_engine/src",
+    "services/twin_engine/src",
     "services/inference/src",
     "services/agent_runtime/src",
 ]

@@ -10,6 +10,7 @@ root_packages =
     at_data
     at_persistence
     at_api
+    at_twin
 include_external_packages = True
 
 [importlinter:contract:domain-purity]
@@ -109,6 +110,18 @@ forbidden_modules =
     at_persistence
 ; Rationale: ingestion and EDA are offline batch concerns. Keeping them free of
 ; the serving stack means the training image never needs FastAPI installed.
+
+[importlinter:contract:twin-engine-is-headless]
+name = Twin engine never imports the web layer
+type = forbidden
+source_modules =
+    at_twin
+forbidden_modules =
+    fastapi
+    starlette
+    at_api
+; Rationale: the twin engine is a headless worker process. If it ever needs to
+; expose HTTP it does so via the bus and the API service, never by importing them.
 
 [importlinter:contract:no-cycles]
 name = No circular dependencies between top-level packages

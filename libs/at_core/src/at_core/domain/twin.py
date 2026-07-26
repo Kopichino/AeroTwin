@@ -232,6 +232,7 @@ def apply_health_update(
     anomaly_score: float,
     prediction: Prediction | None,
     maintenance_applied: bool = False,
+    model_trusted: bool = True,
 ) -> TransitionResult:
     """Recompute the health index and band, emitting change events.
 
@@ -246,6 +247,7 @@ def apply_health_update(
             anomaly_score=anomaly_score,
             previous_hi=state.health_index,
             maintenance_applied=maintenance_applied,
+            model_trusted=model_trusted,
         )
     )
 

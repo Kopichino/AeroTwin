@@ -110,6 +110,14 @@ class HealthInputs:
     anomaly_score: float = 0.0
     previous_hi: float | None = None
     maintenance_applied: bool = False
+    model_trusted: bool = True
+    """Whether ``rul_p50`` comes from a validated model.
+
+    When False the model term is dropped and its weight is redistributed over the
+    physics terms. Before M5 the RUL figure is a crude trend extrapolation, and
+    letting an untrusted estimate carry 40 % of the health index pulled engines
+    with ~90 % component health down into WARNING.
+    """
 
 
 def physics_term(component_scores: dict[EngineModule, float]) -> float:
@@ -151,16 +159,40 @@ def worst_component_term(component_scores: dict[EngineModule, float]) -> float:
 def fuse_health_index(inputs: HealthInputs) -> float:
     """Compute the smoothed, monotonicity-constrained health index.
 
-    The four weighted terms are combined, EWMA-smoothed against the previous value,
-    and then constrained so health cannot rise faster than
+    The weighted terms are combined, EWMA-smoothed against the previous value, and
+    then constrained so health cannot rise faster than
     ``HI_MAX_RECOVERY_PER_CYCLE`` unless a maintenance action was applied.
+
+    When no trusted model prediction is available the model term is omitted and
+    its weight is redistributed proportionally across the remaining terms, so the
+    index still spans the full 0-100 range instead of being capped.
     """
-    raw = 100.0 * (
-        W_PHYSICS * physics_term(inputs.component_scores)
-        + W_MODEL * model_term(inputs.rul_p50)
-        + W_ANOMALY * anomaly_term(inputs.anomaly_score)
-        + W_WORST_COMPONENT * worst_component_term(inputs.component_scores)
-    )
+    use_model = inputs.model_trusted and inputs.rul_p50 is not None
+
+    if use_model:
+        weights = (W_PHYSICS, W_MODEL, W_ANOMALY, W_WORST_COMPONENT)
+        terms = (
+            physics_term(inputs.component_scores),
+            model_term(inputs.rul_p50),
+            anomaly_term(inputs.anomaly_score),
+            worst_component_term(inputs.component_scores),
+        )
+    else:
+        remaining = W_PHYSICS + W_ANOMALY + W_WORST_COMPONENT
+        weights = (
+            W_PHYSICS / remaining,
+            0.0,
+            W_ANOMALY / remaining,
+            W_WORST_COMPONENT / remaining,
+        )
+        terms = (
+            physics_term(inputs.component_scores),
+            0.0,
+            anomaly_term(inputs.anomaly_score),
+            worst_component_term(inputs.component_scores),
+        )
+
+    raw = 100.0 * sum(weight * term for weight, term in zip(weights, terms, strict=True))
     raw = clamp(raw, 0.0, 100.0)
 
     previous = inputs.previous_hi
