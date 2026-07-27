@@ -8,9 +8,9 @@ PY    := $(VENV)/bin/python
 PIP   := $(VENV)/bin/pip
 COMPOSE_DEV := docker compose -f docker-compose.dev.yml
 
-PY_PKGS := -p at_ml -p at_core -p at_config -p at_observability -p at_bus -p at_data -p at_persistence -p at_api -p at_twin
+PY_PKGS := -p at_rag -p at_ml -p at_core -p at_config -p at_observability -p at_bus -p at_data -p at_persistence -p at_api -p at_twin
 EDITABLE := -e libs/at_core -e libs/at_config -e libs/at_observability \
-            -e libs/at_bus -e libs/at_data -e ml -e libs/at_persistence -e services/api -e services/twin_engine
+            -e libs/at_bus -e libs/at_data -e ml -e rag -e libs/at_persistence -e services/api -e services/twin_engine
 
 .PHONY: help
 help: ## Show this help
@@ -112,6 +112,15 @@ web-test: ## Frontend unit tests
 .PHONY: web-check
 web-check: ## Frontend typecheck + tests + production build
 	cd apps/web && npx tsc --noEmit && npx vitest run && npx next build
+
+.PHONY: rag-index
+rag-index: ## Build the knowledge index and print its statistics
+	$(PY) -c "from pathlib import Path; from at_rag.index import build_index; \
+		print(build_index(Path('data/knowledge')).stats())"
+
+.PHONY: rag-eval
+rag-eval: ## Regenerate docs/reports/rag-eval.md
+	$(PY) tools/preview/render_rag_eval.py
 
 .PHONY: demo
 demo: ## Run the full live platform: API + twins + dashboard on :8000

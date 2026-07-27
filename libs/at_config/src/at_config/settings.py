@@ -78,6 +78,7 @@ class Settings(BaseSettings):
     twin_synthetic: bool = False
     """Run against generated telemetry instead of C-MAPSS (no dataset needed)."""
     interim_dir: str = "data/interim"
+    knowledge_dir: str = "data/knowledge"
     tick_hz: float = 8.0
     replay_speed: float = 1.0
     cycle_duration_ms: int = 1000

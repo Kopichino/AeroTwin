@@ -28,7 +28,7 @@ from at_api.middleware import (
     TraceContextMiddleware,
     register_exception_handlers,
 )
-from at_api.routers import fleet, health
+from at_api.routers import fleet, health, knowledge
 from at_api.services.twin_runner import TwinRunner, build_registry
 from at_api.ws.gateway import WebSocketGateway
 from at_bus import InMemoryBus
@@ -80,6 +80,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         json_output=settings.log_json,
     )
 
+    # Resolved here rather than inside the lifespan coroutine: a blocking
+    # filesystem probe does not belong on the event loop, even at startup.
+    corpus = Path(settings.knowledge_dir)
+    corpus_exists = corpus.is_dir()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Acquire and release process-wide resources.
@@ -114,6 +119,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         gateway.register_snapshot_provider("twin", runner.twin_snapshot)
         gateway.register_snapshot_provider(CHANNEL_SYSTEM, runner.system_snapshot)
         app.state.ws_gateway = gateway
+
+        # The knowledge index is built once at startup: loading the embedding
+        # model takes several seconds, so per-request construction would make
+        # search unusable and lazy construction would penalise one unlucky user.
+        # A corpus failure must not prevent the platform from starting -- the
+        # fleet does not depend on it, and search reports its own unavailability.
+        app.state.knowledge_index = None
+        if corpus_exists:
+            try:
+                from at_rag.index import build_index
+
+                index = build_index(corpus)
+                app.state.knowledge_index = index
+                logger.info("knowledge_indexed", **index.stats())
+            except Exception as exc:
+                logger.warning("knowledge_index_failed", error=str(exc))
+        else:
+            logger.warning("knowledge_corpus_missing", path=str(corpus))
 
         await runner.start()
         try:
@@ -161,6 +184,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # ── routers ──────────────────────────────────────────────────────────────
     app.include_router(health.router)  # unprefixed: probes live at /health/*
     app.include_router(fleet.router)
+    app.include_router(knowledge.router)
 
     @app.websocket("/ws/v1")
     async def websocket_endpoint(websocket: WebSocket) -> None:

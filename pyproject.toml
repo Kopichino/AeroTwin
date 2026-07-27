@@ -78,6 +78,7 @@ mypy_path = [
     "libs/at_data/src",
     "libs/at_persistence/src",
     "ml/src",
+    "rag/src",
     "services/api/src",
     "services/twin_engine/src",
     "services/twin_engine/src",
@@ -92,7 +93,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["libs", "services", "ml"]
+testpaths = ["libs", "services", "ml", "rag"]
 python_files = ["test_*.py"]
 addopts = "-q --strict-markers --import-mode=importlib"
 consider_namespace_packages = true

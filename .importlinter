@@ -13,6 +13,7 @@ root_packages =
     at_api
     at_twin
     at_ml
+    at_rag
 include_external_packages = True
 
 [importlinter:contract:domain-purity]
@@ -153,6 +154,21 @@ forbidden_modules =
 ; the research stack. The model registry is the only interface between training
 ; and serving (Doc 07 section 7.8), which is what keeps the inference container
 ; small and its dependencies stable.
+
+[importlinter:contract:rag-is-standalone]
+name = RAG library does not depend on the twin engine or the API
+type = forbidden
+source_modules =
+    at_rag
+forbidden_modules =
+    at_api
+    at_twin
+    at_ml
+    fastapi
+; Rationale: corpus ingestion and retrieval are independent of engine
+; simulation. Keeping them separate means the index can be built offline, in a
+; batch job, without importing the streaming stack -- and lets the agent runtime
+; in M10 consume retrieval through MCP without pulling in the twin engine.
 
 [importlinter:contract:no-cycles]
 name = No circular dependencies between top-level packages
