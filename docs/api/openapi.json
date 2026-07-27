@@ -306,6 +306,139 @@
         ]
       }
     },
+    "/api/v1/engines/{engine_ref}/explain": {
+      "get": {
+        "description": "Per-sensor attribution for the current prediction (Doc 07 section 7.7).\n\nComputed on demand rather than every cycle: the gradient pass roughly\ndoubles inference cost, and an explanation is only read when a user opens\nthe panel.",
+        "operationId": "get_explanation_api_v1_engines__engine_ref__explain_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engine_ref",
+            "required": true,
+            "schema": {
+              "title": "Engine Ref",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Explanation Api V1 Engines  Engine Ref  Explain Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Attribution",
+        "tags": [
+          "fleet",
+          "predictions"
+        ]
+      }
+    },
+    "/api/v1/engines/{engine_ref}/history": {
+      "get": {
+        "description": "Time series for the engine detail charts.\n\nDecimated server-side: a chart plotting 200 points has no use for 600\nsamples, and shipping them would triple the payload for pixels that overlap.",
+        "operationId": "get_history_api_v1_engines__engine_ref__history_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "engine_ref",
+            "required": true,
+            "schema": {
+              "title": "Engine Ref",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 600,
+              "minimum": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_cycle",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Cycle"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get History Api V1 Engines  Engine Ref  History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Validation failed"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "500": {
+            "description": "Internal error"
+          }
+        },
+        "summary": "Chart history",
+        "tags": [
+          "fleet",
+          "engines"
+        ]
+      }
+    },
     "/api/v1/fleet": {
       "get": {
         "description": "Paginated fleet listing with sorting and filtering.",

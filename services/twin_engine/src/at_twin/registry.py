@@ -39,6 +39,7 @@ from at_core.domain.twin import (
 )
 from at_core.events import DomainEvent
 from at_twin.anomaly import MIN_OBSERVATIONS, AnomalyReading, DetectorState, detect
+from at_twin.history import CHARTED_SENSORS, HistorySample, HistoryStore
 from at_twin.inference import InferenceClient, LoadedModel
 from at_twin.physics import (
     BaselineAccumulator,
@@ -143,6 +144,7 @@ class TwinRegistry:
         self._recycle_count: dict[uuid.UUID, int] = {}
 
         self._twins: dict[uuid.UUID, TwinRuntime] = {}
+        self.history = HistoryStore()
         self._pending: list[tuple[uuid.UUID, np.ndarray, int]] = []
         self._by_unit: dict[int, uuid.UUID] = {}
 
@@ -454,6 +456,8 @@ class TwinRegistry:
         runtime.state = health.state
         events.extend(health.events)
 
+        self._record_history(runtime, reading)
+
         if reading.is_new:
             runtime.state, event = _emit_anomaly(runtime.state, reading, opened=True)
             events.append(event)
@@ -494,6 +498,7 @@ class TwinRegistry:
         # window spanning two different engines, and left the new twin looking
         # permanently up to date so it was never scored again.
         runtime.history.clear()
+        self.history.clear(str(runtime.state.engine_id))
         runtime.last_inference_cycle = -999
         runtime.anomaly = None
         self._catch_up_baseline(runtime)
@@ -532,6 +537,31 @@ class TwinRegistry:
             return runtime.state.prediction
 
         return self._trend_estimate(runtime, components)
+
+    def _record_history(self, runtime: TwinRuntime, reading: AnomalyReading) -> None:
+        """Append this cycle to the engine's chart history."""
+        state = runtime.state
+        prediction = state.prediction
+        self.history.record(
+            str(state.engine_id),
+            HistorySample(
+                cycle=state.cycle,
+                health_index=state.health_index,
+                health_band=state.health_band.value,
+                rul_p50=prediction.rul_p50 if prediction else None,
+                rul_p10=prediction.rul_p10 if prediction else None,
+                rul_p90=prediction.rul_p90 if prediction else None,
+                anomaly_score=reading.score,
+                model_backed=bool(prediction and prediction.model_id),
+                sensors={
+                    key: value for key, value in state.sensors.items() if key in CHARTED_SENSORS
+                },
+                components={
+                    module.value: component.score
+                    for module, component in runtime.components.items()
+                },
+            ),
+        )
 
     def _run_batched_inference(self) -> None:
         """Score every queued window in a single call and fold results back in."""

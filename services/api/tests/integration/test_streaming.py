@@ -8,6 +8,7 @@ mocking the pieces apart.
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Iterator
 
 import pytest
@@ -38,6 +39,23 @@ def streaming_app() -> FastAPI:
 def live(streaming_app: FastAPI) -> Iterator[TestClient]:
     with TestClient(streaming_app) as client:
         yield client
+
+
+def wait_for_history(client: TestClient, engine: str = "1", timeout: float = 5.0) -> int:
+    """Block until the runner has recorded at least one sample.
+
+    The twin runner is an asyncio task started by the app lifespan, so on a
+    freshly created client the first tick has not necessarily happened yet.
+    Polling for the precondition is deterministic; a fixed sleep would be either
+    flaky or needlessly slow.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        count = client.get(f"/api/v1/engines/{engine}/history").json().get("count", 0)
+        if count > 0:
+            return int(count)
+        time.sleep(0.05)
+    raise AssertionError(f"no history recorded for engine {engine} within {timeout}s")
 
 
 # ── REST ─────────────────────────────────────────────────────────────────────
@@ -132,6 +150,76 @@ def test_dashboard_is_served(live: TestClient) -> None:
     response = live.get("/dashboard")
     assert response.status_code == 200
     assert "AeroTwin" in response.text
+
+
+# ── history and explanation ──────────────────────────────────────────────────
+
+
+def test_history_returns_samples(live: TestClient) -> None:
+    wait_for_history(live)
+    body = live.get("/api/v1/engines/1/history").json()
+    assert body["count"] > 0
+    assert len(body["samples"]) == body["count"]
+
+
+def test_history_samples_carry_chart_fields(live: TestClient) -> None:
+    wait_for_history(live)
+    sample = live.get("/api/v1/engines/1/history").json()["samples"][0]
+    for field in ("cycle", "health_index", "health_band", "anomaly_score", "sensors"):
+        assert field in sample, f"history sample missing {field}"
+
+
+def test_history_is_ordered_by_cycle(live: TestClient) -> None:
+    wait_for_history(live)
+    cycles = [s["cycle"] for s in live.get("/api/v1/engines/1/history").json()["samples"]]
+    assert cycles == sorted(cycles)
+
+
+def test_history_respects_the_limit(live: TestClient) -> None:
+    body = live.get("/api/v1/engines/1/history?limit=10").json()
+    assert body["count"] <= 10
+
+
+def test_history_rejects_an_out_of_range_limit(live: TestClient) -> None:
+    """Guards against a client asking for the whole buffer by accident."""
+    response = live.get("/api/v1/engines/1/history?limit=5")
+    assert response.status_code == 400
+    assert response.json()["errors"][0]["field"] == "limit"
+
+
+def test_history_from_cycle_filters(live: TestClient) -> None:
+    wait_for_history(live)
+    full = live.get("/api/v1/engines/1/history").json()["samples"]
+    if len(full) < 4:
+        pytest.skip("not enough history accumulated yet")
+    midpoint = full[len(full) // 2]["cycle"]
+    filtered = live.get(f"/api/v1/engines/1/history?from_cycle={midpoint}").json()
+    assert all(s["cycle"] >= midpoint for s in filtered["samples"])
+
+
+def test_history_for_unknown_engine_is_404(live: TestClient) -> None:
+    response = live.get("/api/v1/engines/NOPE/history")
+    assert response.status_code == 404
+    assert response.json()["code"] == "ENGINE_NOT_FOUND"
+
+
+def test_explain_returns_a_structured_response(live: TestClient) -> None:
+    """Without a registered model this reports why, rather than erroring."""
+    body = live.get("/api/v1/engines/1/explain").json()
+    assert "available" in body
+    if not body["available"]:
+        assert body["reason"]
+
+
+def test_explain_for_unknown_engine_is_404(live: TestClient) -> None:
+    assert live.get("/api/v1/engines/NOPE/explain").status_code == 404
+
+
+def test_system_reports_history_usage(live: TestClient) -> None:
+    wait_for_history(live)
+    history = live.get("/api/v1/system").json()["history"]
+    assert history["engines"] > 0
+    assert history["samples"] > 0
 
 
 # ── commands ─────────────────────────────────────────────────────────────────

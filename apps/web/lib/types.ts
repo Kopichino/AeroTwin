@@ -88,6 +88,20 @@ export interface TwinDetail {
   seq: number;
 }
 
+/** One cycle of chart history (Doc 12 section 12.4). */
+export interface HistorySample {
+  cycle: number;
+  health_index: number;
+  health_band: HealthBand;
+  rul_p50: number | null;
+  rul_p10: number | null;
+  rul_p90: number | null;
+  anomaly_score: number;
+  model_backed: boolean;
+  sensors: Record<string, number>;
+  components: Record<string, number>;
+}
+
 export interface InferenceStats {
   models_loaded: number;
   calls: number;

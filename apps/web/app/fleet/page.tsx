@@ -8,7 +8,8 @@
  * paints immediately and fills in as the first snapshot lands.
  */
 
-import { useCallback, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback } from 'react';
 
 import { ConnectionBadge, StatTile, bandColour } from '@/components/ui';
 import { BandFilterBar, FleetGrid } from '@/features/fleet/fleet-grid';
@@ -28,8 +29,11 @@ export default function FleetPage() {
   const anomaliesOnly = useFleetStore((s) => s.anomaliesOnly);
   const toggleAnomaliesOnly = useFleetStore((s) => s.toggleAnomaliesOnly);
 
-  const [selected, setSelected] = useState<string | null>(null);
-  const handleSelect = useCallback((id: string) => setSelected(id), []);
+  const router = useRouter();
+  const handleSelect = useCallback(
+    (id: string) => router.push(`/engines/${id}`),
+    [router],
+  );
 
   const rows = [...engines.values()];
   const alerting = rows.filter((row) => row.anomaly_alerting).length;
@@ -37,8 +41,6 @@ export default function FleetPage() {
   const health = summary?.avg_health ?? 0;
   const healthColour =
     health >= 80 ? bandColour('HEALTHY') : health >= 60 ? bandColour('WATCH') : bandColour('WARNING');
-
-  const detail = selected ? engines.get(selected) : null;
 
   return (
     <main className="mx-auto max-w-[1500px] px-6 py-6">
@@ -125,56 +127,6 @@ export default function FleetPage() {
       </div>
 
       <FleetGrid onSelect={handleSelect} />
-
-      {detail ? (
-        <aside
-          aria-label={`Details for ${detail.tail_number}`}
-          className="glass-panel mt-4 rounded-md p-4"
-        >
-          <div className="flex items-center gap-3">
-            <h2 className="font-mono text-sm">{detail.tail_number}</h2>
-            <span className="text-xs text-tertiary">
-              unit {detail.unit_number} · cycle {detail.cycle}
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelected(null)}
-              className="ml-auto text-xs text-tertiary transition-colors hover:text-secondary"
-            >
-              Close
-            </button>
-          </div>
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-xs sm:grid-cols-4">
-            <div>
-              <dt className="text-tertiary">Health</dt>
-              <dd className="tabular font-mono" style={{ color: bandColour(detail.health_band) }}>
-                {detail.health_index.toFixed(1)} · {detail.health_band}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-tertiary">Remaining life</dt>
-              <dd className="tabular font-mono">
-                {detail.rul_p50 != null ? Math.round(detail.rul_p50) : '—'} cycles
-              </dd>
-            </div>
-            <div>
-              <dt className="text-tertiary">80% interval</dt>
-              <dd className="tabular font-mono text-secondary">
-                {detail.rul_p10 != null && detail.rul_p90 != null
-                  ? `${Math.round(detail.rul_p10)}–${Math.round(detail.rul_p90)}`
-                  : '—'}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-tertiary">Worst module</dt>
-              <dd className="font-mono">{detail.worst_module ?? '—'}</dd>
-            </div>
-          </dl>
-          <p className="mt-3 text-[11px] text-tertiary">
-            Full engine detail, sensor history and 3D visualisation arrive in M7 and M8.
-          </p>
-        </aside>
-      ) : null}
 
       <footer className="mt-6 text-center text-[11px] text-tertiary">
         Live digital twins replaying NASA C-MAPSS · physics-informed component health ·

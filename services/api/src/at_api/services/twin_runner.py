@@ -212,6 +212,73 @@ class TwinRunner:
     def system_snapshot(self, _: str | None = None) -> dict[str, Any]:
         return self.stats()
 
+    def explain(self, engine_id: str) -> dict[str, Any]:
+        """Attribution for one engine's current prediction.
+
+        Runs a fresh scored pass with ``explain=True``. Returns a structured
+        "unavailable" response rather than an error when the engine has not
+        accumulated enough history to be scored: an empty panel with a reason is
+        more useful than a 500.
+        """
+        import uuid as _uuid
+
+        registry = self.registry
+        try:
+            key = _uuid.UUID(engine_id)
+        except ValueError:
+            return {"available": False, "reason": "unknown engine"}
+
+        runtime = registry._twins.get(key)
+        model = registry.inference.model_for(registry.subset.value)
+
+        if runtime is None:
+            return {"available": False, "reason": "unknown engine"}
+        if model is None:
+            return {"available": False, "reason": "no model registered for this subset"}
+        if len(runtime.history) < model.window:
+            return {
+                "available": False,
+                "reason": f"needs {model.window} cycles of history, has {len(runtime.history)}",
+            }
+
+        window = registry._assemble_window(runtime, model)
+        if window is None:
+            return {"available": False, "reason": "window could not be assembled"}
+
+        from at_twin.inference import predict_batch
+
+        result = predict_batch(
+            model,
+            window[None, :, :],
+            __import__("numpy").asarray([runtime.state.regime]),
+            explain=True,
+        )[0]
+
+        return {
+            "available": True,
+            "engine_id": engine_id,
+            "cycle": runtime.state.cycle,
+            "model_id": result.model_id,
+            "rul_p50": round(result.rul_p50, 1),
+            "rul_p10": round(result.rul_p10, 1),
+            "rul_p90": round(result.rul_p90, 1),
+            "failure_prob": {str(k): round(v, 3) for k, v in result.failure_prob.items()},
+            "attributions": [
+                {
+                    "sensor": a.sensor,
+                    "name": a.name,
+                    "value": a.value,
+                    "direction": a.direction,
+                    "module": a.module,
+                }
+                for a in result.attributions
+            ],
+            "module_scores": {
+                module.value: round(score, 4)
+                for module, score in sorted(result.module_scores.items(), key=lambda item: -item[1])
+            },
+        }
+
     def stats(self) -> dict[str, Any]:
         latencies = sorted(self._tick_latencies)
         p99 = latencies[int(len(latencies) * 0.99)] if latencies else 0.0
@@ -225,6 +292,10 @@ class TwinRunner:
             "tick_p99_ms": round(p99, 3),
             "uptime_s": round(time.perf_counter() - self._started_at, 1),
             "inference": self.registry.inference.stats(),
+            "history": {
+                "engines": self.registry.history.engine_count,
+                "samples": self.registry.history.total_samples,
+            },
         }
 
 

@@ -133,6 +133,45 @@ async def send_command(
     return {"accepted": True, "engine_id": resolved, "command": parsed.value}
 
 
+@router.get("/engines/{engine_ref}/history", tags=["engines"], summary="Chart history")
+async def get_history(
+    engine_ref: str,
+    runner: RunnerDep,
+    limit: int = Query(200, ge=10, le=600),
+    from_cycle: int | None = Query(None, ge=0),
+) -> dict[str, Any]:
+    """Time series for the engine detail charts.
+
+    Decimated server-side: a chart plotting 200 points has no use for 600
+    samples, and shipping them would triple the payload for pixels that overlap.
+    """
+    resolved = _resolve(engine_ref, runner)
+    if resolved is None:
+        raise EngineNotFound(f"No engine matches '{engine_ref}'.")
+
+    samples = runner.registry.history.series(resolved, limit=limit, from_cycle=from_cycle)
+    return {
+        "engine_id": resolved,
+        "count": len(samples),
+        "samples": samples,
+    }
+
+
+@router.get("/engines/{engine_ref}/explain", tags=["predictions"], summary="Attribution")
+async def get_explanation(engine_ref: str, runner: RunnerDep) -> dict[str, Any]:
+    """Per-sensor attribution for the current prediction (Doc 07 section 7.7).
+
+    Computed on demand rather than every cycle: the gradient pass roughly
+    doubles inference cost, and an explanation is only read when a user opens
+    the panel.
+    """
+    resolved = _resolve(engine_ref, runner)
+    if resolved is None:
+        raise EngineNotFound(f"No engine matches '{engine_ref}'.")
+
+    return runner.explain(resolved)
+
+
 @router.get("/system", tags=["admin"], summary="Engine runtime statistics")
 async def system_stats(runner: RunnerDep) -> dict[str, Any]:
     return runner.stats()
