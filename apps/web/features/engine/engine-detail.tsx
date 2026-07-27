@@ -9,6 +9,7 @@
  * surrounding panels are already sized around it.
  */
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 
 import { AttributionBars, LineChart, Sparkline, type Point } from '@/components/charts';
@@ -16,6 +17,23 @@ import { HealthBar, HealthPill, bandColour } from '@/components/ui';
 import { CHARTED_SENSOR_META } from '@/lib/sensors';
 import type { HistorySample } from '@/lib/types';
 import { useFleetStore } from '@/stores/fleet-store';
+
+/**
+ * `three` is ~22 MB unpacked and has no server-rendered form. Loading it
+ * dynamically keeps it out of the fleet-page bundle entirely and off the
+ * server-render path.
+ */
+const EngineScene = dynamic(
+  () => import('@/three/engine-scene').then((module) => module.EngineScene),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[360px] items-center justify-center rounded-md border border-line bg-[#05060a] text-xs text-tertiary">
+        Loading 3D view…
+      </div>
+    ),
+  },
+);
 
 type Tab = 'overview' | 'sensors' | 'prediction' | 'components';
 
@@ -189,12 +207,22 @@ export function EngineDetail({ engineId }: { engineId: string }) {
         */}
         <section aria-label="Engine visualisation" className="glass-panel rounded-md p-4">
           <div className="mb-3 flex items-center gap-2">
-            <h2 className="text-[13px] font-semibold">Engine</h2>
-            <span className="ml-auto rounded-sm border border-line px-2 py-0.5 text-[10px] text-tertiary">
-              3D view in M8
+            <h2 className="text-[13px] font-semibold">Digital twin</h2>
+            <span className="ml-auto font-mono text-[10px] text-tertiary">
+              fan {(state?.sensors?.s8 ?? 0).toFixed(0)} rpm
             </span>
           </div>
-          <ComponentSchematic components={state?.components ?? {}} worst={state?.worst_module ?? null} />
+          <EngineScene
+            components={state?.components ?? {}}
+            sensors={state?.sensors ?? {}}
+            anomalyModule={state?.anomaly?.module ?? null}
+            worstModule={state?.worst_module ?? null}
+          />
+          <p className="mt-3 text-[10px] text-tertiary">
+            Module colour is component health, derived from thermodynamic efficiency and
+            flow-capacity proxies measured against this engine&apos;s own healthy baseline.
+            The fan turns at the physical fan speed.
+          </p>
         </section>
 
         <section className="glass-panel overflow-hidden rounded-md">
@@ -307,7 +335,19 @@ export function EngineDetail({ engineId }: { engineId: string }) {
             ) : null}
 
             {tab === 'components' ? (
-              <ComponentTable components={state?.components ?? {}} drivers={state?.drivers ?? []} />
+              <div className="space-y-5">
+                <ComponentTable
+                  components={state?.components ?? {}}
+                  drivers={state?.drivers ?? []}
+                />
+                <div>
+                  <h3 className="mb-2 text-xs font-semibold">Axial layout</h3>
+                  <ComponentSchematic
+                    components={state?.components ?? {}}
+                    worst={state?.worst_module ?? null}
+                  />
+                </div>
+              </div>
             ) : null}
           </div>
         </section>

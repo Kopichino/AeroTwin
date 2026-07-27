@@ -52,6 +52,11 @@ ignore = ["B008", "RUF012"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/tests/**" = ["S101"]
+# The preview renderers emit HTML from f-string templates. Wrapping those lines
+# to 100 characters would break the markup across statements and make the output
+# far harder to read than the lint warning is worth. Typographic dashes in the
+# generated copy are intentional.
+"tools/preview/*.py" = ["E501", "RUF001", "UP031", "RUF046", "E741"]
 
 [tool.mypy]
 python_version = "3.12"
