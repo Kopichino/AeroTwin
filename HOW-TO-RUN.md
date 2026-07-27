@@ -67,6 +67,7 @@ Then open:
 | **http://localhost:8000/dashboard** | Zero-dependency fallback dashboard (no Node needed) |
 | http://localhost:8000/docs | Interactive OpenAPI explorer |
 | http://localhost:8000/api/v1/fleet | Raw fleet JSON |
+| http://localhost:8000/api/v1/knowledge/search?q=borescope | Knowledge search |
 | http://localhost:8000/health/ready | Readiness probe |
 
 `make demo` runs the API, the twin engine and the WebSocket gateway in one
@@ -132,6 +133,8 @@ dying out.
 ## Common commands
 
 ```bash
+make rag-index      # build the knowledge index, print statistics
+make rag-eval       # regenerate docs/reports/rag-eval.md
 make help           # every target
 make check          # lint + typecheck + architecture contracts + 319 tests
 make test           # tests only
