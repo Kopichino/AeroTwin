@@ -10,6 +10,7 @@ Open either file in any browser:
 
 - **`docs/preview/fleet-ui-preview.html`** — the Next.js fleet UI
 - **`docs/preview/engine-detail-preview.html`** — engine detail with charts and XAI
+- **`docs/preview/engine-3d-preview.html`** — the 3D digital twin view
 - **`docs/preview/dashboard-preview.html`** — the zero-dependency fallback
 
 A static snapshot of the real dashboard with genuine twin state baked in: 260
@@ -35,9 +36,16 @@ Open **http://localhost:3000/fleet**.
 Sortable fleet table, band filters, search, anomalies-only toggle, live KPI
 tiles and a connection badge that shows reconnect attempts honestly.
 
-Click any row to open the engine detail view: health and anomaly history, the
-RUL timeline with its conformal 80% band, per-sensor sparklines, component
-health, and the attribution panel explaining what drives the prediction.
+Click any row to open the engine detail view: an interactive 3D turbofan whose
+modules are coloured by component health and whose fan turns at the real fan
+speed, alongside health and anomaly history, the RUL timeline with its conformal
+80% band, per-sensor sparklines, and the attribution panel explaining what drives
+the prediction.
+
+In the 3D view: drag to orbit, scroll to zoom, `E` for exploded view, `X` for
+X-ray. Modules are also selectable from the chips below the canvas, which keeps
+the view usable by keyboard and screen reader. If WebGL is unavailable the same
+information renders as a 2D cross-section.
 
 `make web-check` runs typecheck, unit tests and a production build.
 
