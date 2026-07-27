@@ -9,6 +9,7 @@ Three ways to see it, fastest first.
 Open either file in any browser:
 
 - **`docs/preview/fleet-ui-preview.html`** — the Next.js fleet UI
+- **`docs/preview/engine-detail-preview.html`** — engine detail with charts and XAI
 - **`docs/preview/dashboard-preview.html`** — the zero-dependency fallback
 
 A static snapshot of the real dashboard with genuine twin state baked in: 260
@@ -33,6 +34,10 @@ Open **http://localhost:3000/fleet**.
 
 Sortable fleet table, band filters, search, anomalies-only toggle, live KPI
 tiles and a connection badge that shows reconnect attempts honestly.
+
+Click any row to open the engine detail view: health and anomaly history, the
+RUL timeline with its conformal 80% band, per-sensor sparklines, component
+health, and the attribution panel explaining what drives the prediction.
 
 `make web-check` runs typecheck, unit tests and a production build.
 
