@@ -2,7 +2,7 @@
 name = "at-twin"
 version = "0.1.0"
 requires-python = ">=3.12"
-dependencies = ["at-core", "at-config", "at-observability", "at-data", "at-persistence", "redis>=5.2"]
+dependencies = ["at-core", "at-config", "at-observability", "at-data", "at-persistence", "redis>=5.2", "torch>=2.5"]
 
 [build-system]
 requires = ["hatchling"]

@@ -17,7 +17,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl \
+    && apt-get install -y --no-install-recommends curl adduser \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only dependency metadata first so the layer cache survives source edits.
@@ -55,8 +55,10 @@ CMD ["uvicorn", "at_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--rel
 FROM base AS runtime
 
 # Run unprivileged: a container that never needs root should never have it.
-RUN useradd --create-home --uid 10001 aerotwin \
-    && chown -R aerotwin:aerotwin /app
+RUN set -eux; \
+    if ! getent group aerotwin >/dev/null 2>&1; then addgroup --system aerotwin; fi; \
+    if ! id -u aerotwin >/dev/null 2>&1; then adduser --system --ingroup aerotwin --uid 10001 aerotwin; fi; \
+    chown -R aerotwin:aerotwin /app
 USER aerotwin
 
 ENV AT_PROFILE=docker \
